@@ -13,13 +13,25 @@ NC='\033[0m' # No Color
 
 echo -e "${GREEN}Starting Fix This Stuff Microservices...${NC}"
 
+# Detect whether to use 'docker compose' or 'docker-compose'
+DOCKER_COMPOSE_CMD="docker-compose"
+if command -v docker &> /dev/null && docker compose version &> /dev/null; then
+    DOCKER_COMPOSE_CMD="docker compose"
+elif ! command -v docker-compose &> /dev/null; then
+    echo -e "${YELLOW}Warning: Neither 'docker compose' nor 'docker-compose' command found.${NC}"
+    echo -e "${YELLOW}Please ensure Docker and Docker Compose are installed correctly.${NC}"
+    exit 1
+fi
+
+echo -e "${BLUE}Using command: ${DOCKER_COMPOSE_CMD}${NC}"
+
 # Stop any existing containers and remove them
 echo -e "${BLUE}Stopping any existing containers...${NC}"
-docker compose down
+$DOCKER_COMPOSE_CMD down
 
 # Build and start all services
 echo -e "${BLUE}Building and starting all services...${NC}"
-docker compose up -d --build
+$DOCKER_COMPOSE_CMD up -d --build
 
 # Wait for services to start
 echo -e "${YELLOW}Waiting for services to start...${NC}"
@@ -27,7 +39,7 @@ sleep 5
 
 # Check if services are running
 echo -e "${BLUE}Checking service status:${NC}"
-docker compose ps
+$DOCKER_COMPOSE_CMD ps
 
 # Display API endpoints
 echo -e "\n${GREEN}=== Fix This Stuff API Endpoints ===${NC}"
@@ -52,4 +64,4 @@ echo -e ""
 echo -e "${BLUE}Database:${NC} PostgreSQL on port 5432"
 echo -e "${BLUE}pgAdmin:${NC} http://localhost:8080"
 echo -e ""
-echo -e "${GREEN}To stop all services, run: docker-compose down${NC}"
+echo -e "${GREEN}To stop all services, run: ${DOCKER_COMPOSE_CMD} down${NC}"
