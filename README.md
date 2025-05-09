@@ -62,7 +62,7 @@ A microservice for support ticket management that allows users to create, view, 
 
 The API will be available at `http://localhost:3000`.
 
-To access to pgAdmin, the service is available at `http://localhost:8000`.
+To access to pgAdmin, the service is available at `http://localhost:8080`.
 
 ## API Structure
 

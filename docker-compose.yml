@@ -1,0 +1,109 @@
+services:
+  postgres:
+    image: postgres:latest
+    container_name: postgres-fts
+    environment:
+      POSTGRES_PASSWORD: mysecretpassword
+      POSTGRES_DB: fixthisstuff
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./init-scripts:/docker-entrypoint-initdb.d
+    networks:
+      - fts-network
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: pgadmin-fts
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@example.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "8080:80"
+    depends_on:
+      - postgres
+    networks:
+      - fts-network
+
+  auth-service:
+    build: ./auth-service
+    container_name: auth-service
+    environment:
+      DB_USER: postgres
+      DB_HOST: postgres
+      DB_NAME: fixthisstuff
+      DB_PASSWORD: mysecretpassword
+      DB_PORT: 5432
+      JWT_SECRET: fix_this_stuff_secret_key_change_in_production
+      JWT_EXPIRATION: 86400
+      PORT: 3001
+      NODE_ENV: development
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./auth-service:/app
+      - /app/node_modules
+    depends_on:
+      - postgres
+    networks:
+      - fts-network
+
+  user-service:
+    build: ./user-service
+    container_name: user-service
+    environment:
+      DB_USER: postgres
+      DB_HOST: postgres
+      DB_NAME: fixthisstuff
+      DB_PASSWORD: mysecretpassword
+      DB_PORT: 5432
+      JWT_SECRET: fix_this_stuff_secret_key_change_in_production
+      JWT_EXPIRATION: 86400
+      PORT: 3002
+      NODE_ENV: development
+      AUTH_SERVICE_URL: http://auth-service:3001
+    ports:
+      - "3002:3002"
+    volumes:
+      - ./user-service:/app
+      - /app/node_modules
+    depends_on:
+      - postgres
+      - auth-service
+    networks:
+      - fts-network
+
+  ticket-service:
+    build: ./ticket-service
+    container_name: ticket-service
+    environment:
+      DB_USER: postgres
+      DB_HOST: postgres
+      DB_NAME: fixthisstuff
+      DB_PASSWORD: mysecretpassword
+      DB_PORT: 5432
+      JWT_SECRET: fix_this_stuff_secret_key_change_in_production
+      JWT_EXPIRATION: 86400
+      PORT: 3003
+      NODE_ENV: development
+      AUTH_SERVICE_URL: http://auth-service:3001
+      USER_SERVICE_URL: http://user-service:3002
+    ports:
+      - "3003:3003"
+    volumes:
+      - ./ticket-service:/app
+      - /app/node_modules
+    depends_on:
+      - postgres
+      - auth-service
+      - user-service
+    networks:
+      - fts-network
+
+networks:
+  fts-network:
+    driver: bridge
+
+volumes:
+  postgres-data:
