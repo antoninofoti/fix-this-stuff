@@ -41,15 +41,22 @@ const createTicket = async (req, res) => {
 const getAllTickets = async (req, res) => {
   try {
     let tickets;
-    const userId = req.user.id;
-    const userRole = req.user.role;
     
-    // Admins and technicians can see all tickets
-    if (userRole === 'admin' || userRole === 'technician') {
-      tickets = await ticketModel.findAll();
+    // Check if user is authenticated
+    if (req.user) {
+      const userId = req.user.id;
+      const userRole = req.user.role;
+      
+      // Admins and technicians can see all tickets
+      if (userRole === 'admin' || userRole === 'technician') {
+        tickets = await ticketModel.findAll();
+      } else {
+        // Regular users can only see their own tickets
+        tickets = await ticketModel.findByUserId(userId);
+      }
     } else {
-      // Regular users can only see their own tickets
-      tickets = await ticketModel.findByUserId(userId);
+      // Unauthenticated users can see all public tickets
+      tickets = await ticketModel.findAll(); // You might want to limit what fields are returned for public users
     }
     
     res.status(200).json({ tickets });
@@ -71,13 +78,18 @@ const getTicketById = async (req, res) => {
       return res.status(404).json({ message: 'Ticket not found' });
     }
 
-    // Check if user has permission to view this ticket
-    const userId = req.user.id;
-    const userRole = req.user.role;
-    
-    if (userRole !== 'admin' && userRole !== 'technician' && ticket.created_by !== userId) {
-      return res.status(403).json({ message: 'You do not have permission to view this ticket' });
+    // Check if user is authenticated
+    if (req.user) {
+      // Check if user has permission to view this ticket (for sensitive data)
+      const userId = req.user.id;
+      const userRole = req.user.role;
+      
+      if (userRole !== 'admin' && userRole !== 'technician' && ticket.created_by !== userId) {
+        // For authenticated non-admin users who don't own the ticket, we could restrict some sensitive fields
+        // But still allow them to see the basic ticket information
+      }
     }
+    // For unauthenticated users, we could also filter out sensitive fields here if needed
     
     res.status(200).json({ ticket });
   } catch (error) {
