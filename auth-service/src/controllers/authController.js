@@ -17,20 +17,17 @@ const register = async (req, res) => {
     const { email, password, firstName, lastName, role } = req.body;
 
     // Check if user already exists
-    const existingUser = await userModel.findByEmail(email);
+    const existingUser = await userModel.getUserByEmail(email);
     if (existingUser) {
       return res.status(409).json({ message: 'User already exists with this email' });
     }
 
-    // Hash the password
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    // Create the user
-    const newUser = await userModel.create({
+    // Create the user - map firstName and lastName to name and surname
+    const newUser = await userModel.createUser({
       email,
-      password: hashedPassword,
-      firstName,
-      lastName,
+      password,
+      name: firstName,
+      surname: lastName,
       role: role || 'user' // Default to 'user' role if not specified
     });
 
@@ -60,15 +57,9 @@ const login = async (req, res) => {
 
     const { email, password } = req.body;
 
-    // Find the user
-    const user = await userModel.findByEmail(email);
+    // Find the user and verify credentials
+    const user = await userModel.verifyCredentials(email, password);
     if (!user) {
-      return res.status(401).json({ message: 'Invalid credentials' });
-    }
-
-    // Compare the password
-    const isPasswordValid = await bcrypt.compare(password, user.password);
-    if (!isPasswordValid) {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
@@ -85,8 +76,8 @@ const login = async (req, res) => {
       user: {
         id: user.id,
         email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
+        firstName: user.name,
+        lastName: user.surname,
         role: user.role
       }
     });
@@ -104,7 +95,7 @@ const getProfile = async (req, res) => {
     const userId = req.user.id;
     
     // Get user from database
-    const user = await userModel.findById(userId);
+    const user = await userModel.getUserById(userId);
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
@@ -134,9 +125,35 @@ const verifyToken = (req, res) => {
   });
 };
 
+/**
+ * Verify a token sent via POST request (for microservice communication)
+ */
+const verifyTokenFromPost = (req, res) => {
+  const { token } = req.body;
+  
+  if (!token) {
+    return res.status(400).json({ valid: false, message: 'Token is required' });
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    res.status(200).json({
+      valid: true,
+      user: {
+        id: decoded.id,
+        email: decoded.email,
+        role: decoded.role
+      }
+    });
+  } catch (error) {
+    res.status(200).json({ valid: false, message: 'Invalid or expired token' });
+  }
+};
+
 module.exports = {
   register,
   login,
   getProfile,
-  verifyToken
+  verifyToken,
+  verifyTokenFromPost
 };

@@ -25,4 +25,7 @@ router.get('/profile', authenticateToken, authController.getProfile);
 // Verify token validity - used by other services
 router.get('/verify-token', authenticateToken, authController.verifyToken);
 
+// Verify token validity - POST endpoint for microservices
+router.post('/verify-token', authController.verifyTokenFromPost);
+
 module.exports = router;

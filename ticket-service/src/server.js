@@ -21,8 +21,8 @@ app.use((req, res, next) => {
   next();
 });
 
-// Protected routes
-app.use('/api/tickets', authenticateToken, ticketRoutes);
+// Routes - authentication is handled at the route level
+app.use('/api/tickets', ticketRoutes);
 
 // Health check route
 app.get('/api/health', async (req, res) => {

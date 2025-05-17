@@ -4,6 +4,7 @@ services:
     container_name: postgres-fts
     environment:
       POSTGRES_PASSWORD: mysecretpassword
+      POSTGRES_DB: fixthisstuff
     ports:
       - "5432:5432"
     volumes:
@@ -31,7 +32,7 @@ services:
     environment:
       DB_USER: postgres
       DB_HOST: postgres
-      DB_NAME: authdb
+      DB_NAME: fixthisstuff
       DB_PASSWORD: mysecretpassword
       DB_PORT: 5432
       JWT_SECRET: fix_this_stuff_secret_key_change_in_production
@@ -54,7 +55,7 @@ services:
     environment:
       DB_USER: postgres
       DB_HOST: postgres
-      DB_NAME: userdb
+      DB_NAME: fixthisstuff
       DB_PASSWORD: mysecretpassword
       DB_PORT: 5432
       JWT_SECRET: fix_this_stuff_secret_key_change_in_production
@@ -79,7 +80,7 @@ services:
     environment:
       DB_USER: postgres
       DB_HOST: postgres
-      DB_NAME: ticketdb
+      DB_NAME: fixthisstuff
       DB_PASSWORD: mysecretpassword
       DB_PORT: 5432
       JWT_SECRET: fix_this_stuff_secret_key_change_in_production

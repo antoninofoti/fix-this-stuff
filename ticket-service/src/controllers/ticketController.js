@@ -7,23 +7,47 @@ const axios = require('axios');
  */
 const createTicket = async (req, res) => {
   try {
+    // Check if req.user exists (authentication check)
+    if (!req.user) {
+      console.error('Authentication failed: No user in request');
+      return res.status(401).json({ message: 'Authentication required' });
+    }
+
+    console.log('Authenticated user attempting to create ticket:', req.user);
+
     // Validate request
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
+      console.log('Validation errors:', errors.array());
       return res.status(400).json({ errors: errors.array() });
     }
 
     const { title, description, category, priority } = req.body;
     const userId = req.user.id;
+    
+    if (!userId) {
+      console.error('Invalid user ID in token');
+      return res.status(400).json({ message: 'Invalid user ID' });
+    }
 
-    const newTicket = await ticketModel.create({
+    console.log('Creating ticket with data:', { title, description, category, priority, userId });
+
+    // Get current date plus 7 days for default deadline
+    const deadline = new Date();
+    deadline.setDate(deadline.getDate() + 7);
+    
+    const newTicket = await ticketModel.createTicket({
       title,
-      description,
-      category,
       priority,
-      status: 'open', // Default status
-      created_by: userId
+      deadline_date: deadline,
+      flag_status: 'open',
+      solve_status: 'not_solved',
+      request: description,
+      request_author_id: userId,
+      system_id: parseInt(category, 10) // Convert category to integer for system_id
     });
+
+    console.log('Ticket created successfully:', newTicket);
 
     res.status(201).json({
       message: 'Ticket created successfully',
@@ -31,7 +55,10 @@ const createTicket = async (req, res) => {
     });
   } catch (error) {
     console.error('Error in createTicket:', error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ 
+      message: 'Server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 };
 

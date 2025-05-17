@@ -9,8 +9,8 @@ const router = express.Router();
 router.post('/', authenticateToken, [
   body('title').notEmpty().withMessage('Title is required'),
   body('description').notEmpty().withMessage('Description is required'),
-  body('category').notEmpty().withMessage('Category is required'),
-  body('priority').isIn(['low', 'medium', 'high', 'critical']).withMessage('Invalid priority')
+  body('category').notEmpty().withMessage('Category/system ID is required').isInt().withMessage('Category/system ID must be an integer'),
+  body('priority').isIn(['low', 'medium', 'high']).withMessage('Invalid priority - must be low, medium, or high')
 ], ticketController.createTicket);
 
 // Get all tickets - public access
