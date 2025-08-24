@@ -4,12 +4,14 @@ services:
     container_name: postgres-fts
     environment:
       POSTGRES_PASSWORD: mysecretpassword
-      POSTGRES_DB: fixthisstuff
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@fixthisstuff.com}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin123}
     ports:
       - "5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
-      - ./init-scripts:/docker-entrypoint-initdb.d
+      - ./init-scripts:/docker-entrypoint-initdb.d:Z
+      - ./scripts:/app/scripts:Z
     networks:
       - fts-network
 
@@ -32,7 +34,7 @@ services:
     environment:
       DB_USER: postgres
       DB_HOST: postgres
-      DB_NAME: fixthisstuff
+      DB_NAME: authdb
       DB_PASSWORD: mysecretpassword
       DB_PORT: 5432
       JWT_SECRET: fix_this_stuff_secret_key_change_in_production
@@ -42,7 +44,7 @@ services:
     ports:
       - "3001:3001"
     volumes:
-      - ./auth-service:/app
+      - ./auth-service:/app:Z
       - /app/node_modules
     depends_on:
       - postgres
@@ -55,7 +57,7 @@ services:
     environment:
       DB_USER: postgres
       DB_HOST: postgres
-      DB_NAME: fixthisstuff
+      DB_NAME: userdb
       DB_PASSWORD: mysecretpassword
       DB_PORT: 5432
       JWT_SECRET: fix_this_stuff_secret_key_change_in_production
@@ -63,10 +65,13 @@ services:
       PORT: 3002
       NODE_ENV: development
       AUTH_SERVICE_URL: http://auth-service:3001
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@fixthisstuff.com}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin123}
+      # Note: This service now handles moderator functionality (migrated from auth-service)
     ports:
       - "3002:3002"
     volumes:
-      - ./user-service:/app
+      - ./user-service:/app:Z
       - /app/node_modules
     depends_on:
       - postgres
@@ -80,7 +85,7 @@ services:
     environment:
       DB_USER: postgres
       DB_HOST: postgres
-      DB_NAME: fixthisstuff
+      DB_NAME: ticketdb
       DB_PASSWORD: mysecretpassword
       DB_PORT: 5432
       JWT_SECRET: fix_this_stuff_secret_key_change_in_production
@@ -92,12 +97,27 @@ services:
     ports:
       - "3003:3003"
     volumes:
-      - ./ticket-service:/app
+      - ./ticket-service:/app:Z
       - /app/node_modules
     depends_on:
       - postgres
       - auth-service
       - user-service
+    networks:
+      - fts-network
+
+  api-gateway:
+    build: ./src
+    container_name: api-gateway
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      # Add any other env vars your Spring Boot app needs
+    ports:
+      - "8081:8080"
+    depends_on:
+      - auth-service
+      - user-service
+      - ticket-service
     networks:
       - fts-network
 

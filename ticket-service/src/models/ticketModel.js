@@ -13,13 +13,8 @@ const TicketModel = {
     try {
       // Build the base query
       let query = `
-        SELECT t.*, 
-               u.name as author_name, u.surname as author_surname,
-               d.name as developer_name, d.surname as developer_surname,
-               array_agg(tp.name) as topics
+        SELECT t.*, array_agg(tp.name) as topics
         FROM ticket t
-        LEFT JOIN users u ON t.request_author_id = u.id
-        LEFT JOIN users d ON t.assigned_developer_id = d.id
         LEFT JOIN ticket_topic tt ON t.id = tt.ticket_id
         LEFT JOIN topic tp ON tt.topic_id = tp.id
       `;
@@ -65,7 +60,7 @@ const TicketModel = {
       }
 
       // Add GROUP BY to handle the array_agg
-      query += ' GROUP BY t.id, u.name, u.surname, d.name, d.surname';
+      query += ' GROUP BY t.id';
 
       // Add sorting if specified
       if (filters.orderBy) {
@@ -113,19 +108,13 @@ const TicketModel = {
   async getTicketById(ticketId) {
     try {
       const query = `
-        SELECT t.*, 
-               u.name as author_name, u.surname as author_surname, u.email as author_email,
-               d.name as developer_name, d.surname as developer_surname, d.email as developer_email,
-               array_agg(tp.name) as topics
+        SELECT t.*, array_agg(tp.name) as topics
         FROM ticket t
-        LEFT JOIN users u ON t.request_author_id = u.id
-        LEFT JOIN users d ON t.assigned_developer_id = d.id
         LEFT JOIN ticket_topic tt ON t.id = tt.ticket_id
         LEFT JOIN topic tp ON tt.topic_id = tp.id
         WHERE t.id = $1
-        GROUP BY t.id, u.id, d.id
+        GROUP BY t.id
       `;
-
       const { rows } = await db.query(query, [ticketId]);
       return rows.length ? rows[0] : null;
     } catch (error) {
@@ -240,6 +229,31 @@ const TicketModel = {
       if (ticketData.assigned_developer_id !== undefined) {
         updates.push(` assigned_developer_id = $${paramIndex++}`);
         values.push(ticketData.assigned_developer_id);
+      }
+      // Add admin tracking columns
+      if (ticketData.updated_by !== undefined) {
+        updates.push(` updated_by = $${paramIndex++}`);
+        values.push(ticketData.updated_by);
+      }
+      if (ticketData.update_date !== undefined) {
+        updates.push(` update_date = $${paramIndex++}`);
+        values.push(ticketData.update_date);
+      }
+      if (ticketData.assigned_by !== undefined) {
+        updates.push(` assigned_by = $${paramIndex++}`);
+        values.push(ticketData.assigned_by);
+      }
+      if (ticketData.assigned_date !== undefined) {
+        updates.push(` assigned_date = $${paramIndex++}`);
+        values.push(ticketData.assigned_date);
+      }
+      if (ticketData.closed_by !== undefined) {
+        updates.push(` closed_by = $${paramIndex++}`);
+        values.push(ticketData.closed_by);
+      }
+      if (ticketData.closed_date !== undefined) {
+        updates.push(` closed_date = $${paramIndex++}`);
+        values.push(ticketData.closed_date);
       }
 
       // If there are no updates, return the current ticket

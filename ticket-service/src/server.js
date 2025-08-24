@@ -6,7 +6,6 @@ require('dotenv').config();
 const ticketRoutes = require('./routes/ticketRoutes');
 
 // Authentication middleware
-const { authenticateToken } = require('./middleware/authMiddleware');
 
 const app = express();
 const PORT = process.env.PORT || 3003;

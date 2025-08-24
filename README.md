@@ -1,98 +1,72 @@
-# Fix This Stuff - Ticket Management System
+# Fix This Stuff Project
 
-A microservice for support ticket management that allows users to create, view, modify, and delete tickets. The system includes authentication and authorization to protect resources.
+A microservices-based system for managing technical support tickets and developers.
 
-## Project Structure
+## Services
 
-- `ticket-service/`: Service for ticket management
-  - `api/`: REST API for interacting with the database
-  - `docker-compose.yml`: Docker configuration for PostgreSQL and pgAdmin
-  - `fixthisstuff.sql`: Database schema
-  - `example_init_db.sql`: Example data to initialize the database
+### Auth Service
+- Authentication and authorization
+- Credential management
+- System configuration
 
-## Technologies Used
+### User Service
+- User management (developers)
+- User skills management
+- **Moderator management** (migrated from auth-service on May 19, 2025)
 
-- **Backend**: Node.js with Express
-- **Database**: PostgreSQL
-- **Authentication**: JWT (JSON Web Tokens)
-- **Containerization**: Docker and Docker Compose
+### Ticket Service
+- Ticket management
+- Topic management
+- Comment management
 
-## Main Features
+## Architecture
 
-- User authentication (login/registration)
-- Creating, viewing, modifying, and deleting tickets
-- Filtering and sorting tickets
-- Adding comments to tickets
-- Role-based and ownership-based resource protection
+This project follows a microservices architecture with separate databases for each service. Communication between services is handled via REST APIs.
 
-## Development Environment Setup
+## Default Admin Account
 
-### Prerequisites
+The system comes with a default admin account that is created automatically when the containers are first started:
 
-- Node.js
-- Docker and Docker Compose
-- npm
+- **Email**: admin@fixthisstuff.com
+- **Password**: admin123
 
-### Local Setup
+You can override these defaults by setting environment variables before running docker-compose:
 
-1. Clone this repository:
-   ```bash
-   git clone https://github.com/yourusername/fix-this-stuff.git
-   cd fix-this-stuff
-   ```
+```bash
+export ADMIN_EMAIL=your.admin@example.com
+export ADMIN_PASSWORD=your_secure_password
+docker-compose up
+```
 
-2. Start the database with Docker:
-   ```bash
-   cd ticket-service
-   docker-compose up -d
-   ```
+For security in production, it's strongly recommended to change the default admin password after first login.
 
-3. Install API dependencies:
-   ```bash
-   cd api
-   npm install
-   ```
+## Development
 
-4. Create a `.env` file based on `.env.example`
+To run the services locally:
 
-5. Start the development server:
-   ```bash
-   npm run dev
-   ```
+```bash
+docker-compose up
+```
 
-The API will be available at `http://localhost:3000`.
+### Creating Additional Admin Users
 
-To access to pgAdmin, the service is available at `http://localhost:8080`.
+If you need to create an additional admin user manually:
 
-## API Structure
+```bash
+# Syntax: ./scripts/create-admin-user.sh [email] [password]
+./scripts/create-admin-user.sh newadmin@example.com secure_password
+```
 
-### Authentication
+## Recent Changes
 
-- `POST /api/auth/register` - Register a new user
-- `POST /api/auth/login` - User login
-- `GET /api/auth/verify` - Verify token validity
-- `GET /api/auth/profile` - Get the current user's profile
+- **May 19, 2025**: Performed code cleanup to eliminate redundant code and fix inconsistencies. See `docs/code-cleanup-summary.md` for details.
+- **May 19, 2025**: Added default admin user creation during container startup
+- **May 19, 2025**: Migrated moderator functionality from auth-service to user-service. See `scripts/moderator-migration-doc.md` for details.
 
-### Tickets
+## Database Migration
 
-- `GET /api/tickets` - Get all tickets (filterable)
-- `GET /api/tickets/:id` - Get a specific ticket
-- `POST /api/tickets` - Create a new ticket
-- `PUT /api/tickets/:id` - Update an existing ticket
-- `DELETE /api/tickets/:id` - Delete a ticket
+If you need to migrate moderator data from the auth-service to the user-service:
 
-### Comments
-
-- `GET /api/tickets/:id/comments` - Get a ticket's comments
-- `POST /api/tickets/:id/comments` - Add a comment to a ticket
-
-## Security
-
-The system implements various security measures:
-
-1. **JWT Authentication**: Each request to protected APIs requires a valid JWT token
-2. **Prepared Statements**: All SQL queries use prepared statements to prevent SQL injection
-3. **Input Validation**: All inputs are validated before processing
-4. **Role-based Authorization**: Users can access only authorized resources
-5. **Password Hashing**: Passwords are stored with secure hashing (bcrypt)
-
+```bash
+node scripts/migrate-moderators.js
+```

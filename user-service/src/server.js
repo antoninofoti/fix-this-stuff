@@ -4,9 +4,12 @@ require('dotenv').config();
 
 // Route imports
 const userRoutes = require('./routes/userRoutes');
+const moderatorRoutes = require('./routes/moderatorRoutes');
+const roleRoutes = require('./routes/roleRoutes');
+const userController = require('./controllers/userController');
 
 // Authentication middleware
-const { authenticateToken } = require('./middleware/authMiddleware');
+const { authenticateRequest } = require('./middleware/simplifiedAuthMiddleware');
 
 const app = express();
 const PORT = process.env.PORT || 3002;
@@ -21,8 +24,13 @@ app.use((req, res, next) => {
   next();
 });
 
+// Internal routes (no authentication required)
+app.post('/api/users/internal/create', userController.internalCreateUser);
+
 // Protected routes
-app.use('/api/users', authenticateToken, userRoutes);
+app.use('/api/users', authenticateRequest, userRoutes);
+app.use('/api/moderators', moderatorRoutes);
+app.use('/api/roles', roleRoutes);
 
 // Health check route
 app.get('/api/health', async (req, res) => {

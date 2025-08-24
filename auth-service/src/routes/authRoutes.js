@@ -1,7 +1,20 @@
 const express = require('express');
 const { body } = require('express-validator');
 const authController = require('../controllers/authController');
-const { authenticateToken } = require('../middleware/authMiddleware');
+const credentialController = require('../controllers/credentialController');
+const systemController = require('../controllers/systemController');
+const { authenticateRequest } = require('../middleware/auth_Middleware');
+
+// --- BEGIN DEBUG LOG ---
+console.log('--- DEBUG: authRoutes.js ---');
+console.log('typeof authController:', typeof authController);
+if (authController) console.log('authController keys:', Object.keys(authController));
+console.log('typeof credentialController:', typeof credentialController);
+if (credentialController) console.log('credentialController keys:', Object.keys(credentialController));
+console.log('typeof credentialController.getCredentialById:', typeof credentialController.getCredentialById);
+console.log('typeof systemController:', typeof systemController);
+if (systemController) console.log('systemController keys:', Object.keys(systemController));
+// --- END DEBUG LOG ---
 
 const router = express.Router();
 
@@ -19,13 +32,16 @@ router.post('/login', [
   body('password').notEmpty().withMessage('Password is required')
 ], authController.login);
 
-// Get user profile - protected route
-router.get('/profile', authenticateToken, authController.getProfile);
-
 // Verify token validity - used by other services
-router.get('/verify-token', authenticateToken, authController.verifyToken);
+router.get('/verify-token', authenticateRequest, authController.verifyToken);
 
-// Verify token validity - POST endpoint for microservices
-router.post('/verify-token', authController.verifyTokenFromPost);
+// Credential routes for microservice communication
+router.get('/credentials/:credentialId', credentialController.getCredentialById);
+router.get('/credentials/:credentialId/exists', credentialController.checkCredentialExists);
+
+// System routes for microservice communication
+router.get('/systems', systemController.getAllSystems);
+router.get('/systems/:systemId', systemController.getSystemById);
+router.get('/systems/:systemId/exists', systemController.checkSystemExists);
 
 module.exports = router;
