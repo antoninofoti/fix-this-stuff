@@ -27,7 +27,63 @@ const getAllUsers = async (req, res) => {
 };
 
 /**
- * Get a specific user by ID
+ * Get user by credential ID (internal endpoint)
+ */
+const getUserByCredentialId = async (req, res) => {
+  try {
+    const { credentialId } = req.params;
+    
+    const user = await userModel.getUserByCredentialId(credentialId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    // Remove password before sending the response
+    const { password, ...userWithoutPassword } = user;
+    
+    res.status(200).json({ user: userWithoutPassword });
+  } catch (error) {
+    console.error('Error in getUserByCredentialId:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+/**
+ * Create user (internal endpoint - called by auth-service)
+ */
+const createUserInternal = async (req, res) => {
+  try {
+    const { email, firstName, lastName, role, credentialsId } = req.body;
+    
+    // Validate required fields
+    if (!email || !firstName || !lastName || !credentialsId) {
+      return res.status(400).json({ 
+        message: 'Missing required fields: email, firstName, lastName, credentialsId' 
+      });
+    }
+    
+    const userData = {
+      email,
+      firstName,
+      lastName,
+      role: role || 'developer',
+      credentialsId
+    };
+    
+    const newUser = await userModel.createUser(userData);
+    
+    res.status(201).json({
+      message: 'User created successfully',
+      user: newUser
+    });
+  } catch (error) {
+    console.error('Error in createUserInternal:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+/**
+ * Get user by ID
  */
 const getUserById = async (req, res) => {
   try {
@@ -272,12 +328,37 @@ const getPrivilegedUsers = async (req, res) => {
   }
 };
 
+/**
+ * Internal endpoint to get user by ID (no authentication required - for service-to-service calls)
+ */
+const internalGetUserById = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    
+    const user = await userModel.getUserById(userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    // Remove password before sending the response
+    const { password, ...userWithoutPassword } = user;
+    
+    res.status(200).json({ user: userWithoutPassword });
+  } catch (error) {
+    console.error('Error in internalGetUserById:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
 module.exports = {
   getAllUsers,
   getUserById,
+  getUserByCredentialId,
+  createUserInternal,
   updateUser,
   deleteUser,
   internalCreateUser, // Add new controller
+  internalGetUserById, // Add internal getUserById
   getUsersByRole,
   updateUserRole,
   getPrivilegedUsers

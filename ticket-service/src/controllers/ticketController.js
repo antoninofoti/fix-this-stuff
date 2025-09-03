@@ -24,7 +24,7 @@ const createTicket = async (req, res) => {
     }
 
     const { title, description, category, priority } = req.body;
-    const userId = parseInt(req.user.username, 10);
+    const userId = parseInt(req.user.id, 10);
     console.log('userId parsed:', userId, typeof userId);
     
     if (!userId) {

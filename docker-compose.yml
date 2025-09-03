@@ -10,8 +10,8 @@ services:
       - "5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
-      - ./init-scripts:/docker-entrypoint-initdb.d:Z
-      - ./scripts:/app/scripts:Z
+      - ./init-scripts:/docker-entrypoint-initdb.d
+      - ./scripts:/app/scripts
     networks:
       - fts-network
 
@@ -44,7 +44,7 @@ services:
     ports:
       - "3001:3001"
     volumes:
-      - ./auth-service:/app:Z
+      - ./auth-service:/app
       - /app/node_modules
     depends_on:
       - postgres
@@ -71,7 +71,7 @@ services:
     ports:
       - "3002:3002"
     volumes:
-      - ./user-service:/app:Z
+      - ./user-service:/app
       - /app/node_modules
     depends_on:
       - postgres
@@ -97,7 +97,7 @@ services:
     ports:
       - "3003:3003"
     volumes:
-      - ./ticket-service:/app:Z
+      - ./ticket-service:/app
       - /app/node_modules
     depends_on:
       - postgres
@@ -111,6 +111,8 @@ services:
     container_name: api-gateway
     environment:
       SPRING_PROFILES_ACTIVE: docker
+      JWT_SECRET: fix_this_stuff_secret_key_change_in_production
+      LOGGING_LEVEL_ROOT: DEBUG
       # Add any other env vars your Spring Boot app needs
     ports:
       - "8081:8080"

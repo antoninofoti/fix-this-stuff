@@ -56,17 +56,3 @@ If you need to create an additional admin user manually:
 # Syntax: ./scripts/create-admin-user.sh [email] [password]
 ./scripts/create-admin-user.sh newadmin@example.com secure_password
 ```
-
-## Recent Changes
-
-- **May 19, 2025**: Performed code cleanup to eliminate redundant code and fix inconsistencies. See `docs/code-cleanup-summary.md` for details.
-- **May 19, 2025**: Added default admin user creation during container startup
-- **May 19, 2025**: Migrated moderator functionality from auth-service to user-service. See `scripts/moderator-migration-doc.md` for details.
-
-## Database Migration
-
-If you need to migrate moderator data from the auth-service to the user-service:
-
-```bash
-node scripts/migrate-moderators.js
-```

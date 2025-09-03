@@ -14,7 +14,7 @@ class ServiceRegistry {
   static async verifyUserExists(userId) {
     try {
       const userServiceUrl = process.env.USER_SERVICE_URL || 'http://user-service:3002';
-        const response = await axios.get(`${userServiceUrl}/api/users/${userId}`);
+        const response = await axios.get(`${userServiceUrl}/api/users/internal/${userId}`);
         
       return !!response.data.user;
     } catch (error) {
@@ -34,7 +34,7 @@ class ServiceRegistry {
     // Create a circuit breaker for the user service
     const breaker = new CircuitBreaker(
       async function() {
-        const response = await axios.get(`${userServiceUrl}/api/users/${userId}`);
+        const response = await axios.get(`${userServiceUrl}/api/users/internal/${userId}`);
         return response.data.user;
       },
       {

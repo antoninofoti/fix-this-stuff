@@ -12,7 +12,7 @@ const CredentialModel = {
   async getCredentialById(credentialId) {
     try {
       const query = `
-        SELECT id, username, password, registration_date
+        SELECT id, username, password, registration_date, role
         FROM credentials
         WHERE id = $1
       `;
@@ -33,7 +33,7 @@ const CredentialModel = {
   async getCredentialByUsername(username) {
     try {
       const query = `
-        SELECT id, username, password, registration_date 
+        SELECT id, username, password, registration_date, role 
         FROM credentials
         WHERE username = $1
       `;

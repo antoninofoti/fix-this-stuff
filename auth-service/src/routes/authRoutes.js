@@ -18,6 +18,15 @@ if (systemController) console.log('systemController keys:', Object.keys(systemCo
 
 const router = express.Router();
 
+// Health check endpoint
+router.get('/health', (req, res) => {
+    res.status(200).json({
+        status: 'OK',
+        service: 'auth-service',
+        timestamp: new Date().toISOString()
+    });
+});
+
 // User registration
 router.post('/register', [
   body('email').isEmail().withMessage('Must be a valid email'),

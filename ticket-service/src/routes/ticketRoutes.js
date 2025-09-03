@@ -1,8 +1,8 @@
 const express = require('express');
 const { body } = require('express-validator');
 const ticketController = require('../controllers/ticketController');
-// Import the new API Gateway middleware
-const { authenticateRequest, authorizeAdmin, authorizeModerator, authorizeDeveloper } = require('../middleware/apiGatewayMiddleware');
+// Import the enhanced authentication middleware
+const { authenticateRequest, authorizeAdmin, authorizeModerator, authorizeTicketAccess } = require('../middleware/enhancedAuthMiddleware');
 
 const router = express.Router();
 
@@ -20,11 +20,11 @@ router.get('/', authenticateRequest, ticketController.getAllTickets);
 // Special route for admins/moderators to get all tickets with extended information
 router.get('/admin/all', authenticateRequest, authorizeModerator, ticketController.getAllTicketsAdmin);
 
-// Get a specific ticket - requires authentication
-router.get('/:ticketId', authenticateRequest, ticketController.getTicketById);
+// Get a specific ticket - requires authentication and proper access
+router.get('/:ticketId', authenticateRequest, authorizeTicketAccess, ticketController.getTicketById);
 
-// Update a ticket - requires authentication (users can only update their own tickets)
-router.put('/:ticketId', authenticateRequest, [
+// Update a ticket - requires authentication and proper access
+router.put('/:ticketId', authenticateRequest, authorizeTicketAccess, [
   body('title').optional().notEmpty().withMessage('Title cannot be empty'),
   body('description').optional().notEmpty().withMessage('Description cannot be empty'),
   body('priority').optional().isIn(['low', 'medium', 'high']).withMessage('Invalid priority'),

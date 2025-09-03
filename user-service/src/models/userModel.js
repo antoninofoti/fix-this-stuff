@@ -369,6 +369,49 @@ const UserModel = {
   },
 
   /**
+   * Get user by credentials ID
+   * @param {number} credentialsId - The credentials ID to search for
+   * @returns {Promise<Object|null>} User object or null if not found
+   */
+  async getUserByCredentialId(credentialsId) {
+    try {
+      const query = `
+        SELECT u.id, u.email, u.name as firstName, u.surname as lastName, u.rank as role, u.credentials_id, u.registration_date as created_at
+        FROM users u
+        WHERE u.credentials_id = $1
+      `;
+      const { rows } = await db.query(query, [credentialsId]);
+      return rows.length ? rows[0] : null;
+    } catch (error) {
+      console.error(`Error retrieving user by credentials ID ${credentialsId}:`, error);
+      throw error;
+    }
+  },
+
+  /**
+   * Create user (internal method for auth-service)
+   * @param {Object} userData - User data
+   * @returns {Promise<Object>} Created user
+   */
+  async createUser(userData) {
+    try {
+      const { email, firstName, lastName, role, credentialsId } = userData;
+      
+      const query = `
+        INSERT INTO users (email, name, surname, rank, credentials_id, registration_date)
+        VALUES ($1, $2, $3, $4, $5, NOW())
+        RETURNING id, email, name as firstName, surname as lastName, rank as role, credentials_id, registration_date as created_at
+      `;
+      
+      const { rows } = await db.query(query, [email, firstName, lastName, role || 'developer', credentialsId]);
+      return rows[0];
+    } catch (error) {
+      console.error('Error creating user:', error);
+      throw error;
+    }
+  },
+
+  /**
    * Validates user password
    * @param {string} password - Plain password to validate
    * @param {string} hashedPassword - Stored password hash

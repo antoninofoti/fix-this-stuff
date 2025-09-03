@@ -8,6 +8,17 @@ const axios = require('axios'); // For making HTTP requests to user-service
 const USER_SERVICE_URL = process.env.USER_SERVICE_URL || 'http://user-service:3002';
 
 /**
+ * Health check endpoint
+ */
+const health = async (req, res) => {
+  res.status(200).json({ 
+    status: 'OK', 
+    service: 'auth-service',
+    timestamp: new Date().toISOString()
+  });
+};
+
+/**
  * User registration handler
  */
 const register = async (req, res) => {
@@ -86,21 +97,26 @@ const login = async (req, res) => {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
-    // Step 2: Fetch user details from user-service using credential_id (which should be user_id in user-service)
-    // This assumes user-service has an endpoint to get user by credential_id or email.
-    // For now, we'll just use the credential ID as the user ID for the token, 
-    // and the client can fetch full profile from user-service.
-    // A more robust solution would be to get the user's role from user-service here.
-    
-    // For now, we will assume the role is stored with the credential or is static for login purposes
-    // In a real scenario, you'd fetch the role from the user-service based on credential.id
-    // const userProfileResponse = await axios.get(`${USER_SERVICE_URL}/api/users/by-credential/${credential.id}`);
-    // const userRole = userProfileResponse.data.user.role;
-    const userRole = 'user'; // Placeholder: fetch actual role from user-service
+    // Step 2: Use role from credentials table (now includes role column)
+    let userRole = credential.role || 'developer'; // Use role from credentials or default
+    let userId = credential.id;
 
-    // Generate JWT token
+    // Generate JWT token with user information
+    const tokenPayload = {
+      id: userId,
+      credentialId: credential.id,
+      username: credential.username,
+      email: credential.username, // Email is stored as username
+      role: userRole,
+      iat: Math.floor(Date.now() / 1000) // Issued at time
+    };
+    
+    // Debug JWT secret
+    console.log("JWT Secret from environment:", process.env.JWT_SECRET);
+    console.log("Using JWT key:", process.env.JWT_SECRET.substring(0, Math.min(10, process.env.JWT_SECRET.length)) + "...");
+    
     const token = jwt.sign(
-      { id: credential.id, username: credential.username, role: userRole }, // Using username from credential, role needs to be fetched
+      tokenPayload,
       process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRATION }
     );
@@ -109,10 +125,10 @@ const login = async (req, res) => {
       message: 'Login successful',
       token,
       user: {
-        id: credential.id, // This is the credential ID
-        email: credential.username, // Email is the username here
-        // firstName, lastName, and actual role should be fetched from user-service by the client if needed
-        role: userRole 
+        id: userId,
+        credentialId: credential.id,
+        email: credential.username,
+        role: userRole
       }
     });
   } catch (error) {
@@ -162,6 +178,7 @@ const verifyTokenFromPost = (req, res) => {
 };
 
 module.exports = {
+  health,
   register,
   login,
   verifyToken,

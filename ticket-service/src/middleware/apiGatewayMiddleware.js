@@ -1,28 +1,53 @@
 /**
- * New middleware for working with the Spring Boot API Gateway
+ * Enhanced middleware for working with the Spring Boot API Gateway
+ * with JWT fallback support
  */
+const jwt = require('jsonwebtoken');
 
 /**
- * Middleware to authenticate request based on headers from API Gateway
+ * Middleware to authenticate request based on headers from API Gateway or JWT token
  */
 const authenticateRequest = (req, res, next) => {
+  // First try to get user info from trusted headers (set by API Gateway)
   const username = req.headers['x-user'];
   const role = req.headers['x-role'];
+  const userIdHeader = req.headers['x-username'];
   
-  if (!username || !role) {
-    console.log('Missing API Gateway authentication headers');
+  if (username && role) {
+    console.log(`Request authenticated via API Gateway: user=${username}, role=${role}`);
+    
+    // Set user info from trusted headers
+    req.user = { 
+      id: username,
+      username: userIdHeader || username, 
+      role: role 
+    };
+    
+    return next();
+  }
+  
+  // Fallback: try to validate JWT token directly
+  const authHeader = req.headers['authorization'];
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    console.log('Missing API Gateway authentication headers and Authorization header');
     return res.status(401).json({ message: 'Unauthorized request' });
   }
   
-  console.log(`Request authenticated via API Gateway: user=${username}, role=${role}`);
-  
-  // Set user info from trusted headers
-  req.user = { 
-    username: username, 
-    role: role 
-  };
-  
-  next();
+  const token = authHeader.split(' ')[1];
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    console.log(`Request authenticated via JWT: user=${decoded.username}, role=${decoded.role}`);
+    
+    req.user = {
+      id: decoded.id,
+      username: decoded.username || decoded.email,
+      role: decoded.role
+    };
+    next();
+  } catch (err) {
+    console.log('JWT validation failed:', err.message);
+    return res.status(401).json({ message: 'Invalid or expired token' });
+  }
 };
 
 /**

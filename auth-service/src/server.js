@@ -21,6 +21,15 @@ app.use((req, res, next) => {
 // Public routes
 app.use('/api/auth', authRoutes);
 
+// Simple health check route for API Gateway
+app.get('/api/auth/health', (req, res) => {
+  res.status(200).json({ 
+    status: 'OK', 
+    service: 'auth-service', 
+    timestamp: new Date().toISOString() 
+  });
+});
+
 // Health check route
 app.get('/api/health', async (req, res) => {
   try {
