@@ -12,7 +12,6 @@ A microservices-based system for managing technical support tickets and develope
 ### User Service
 - User management (developers)
 - User skills management
-- **Moderator management** (migrated from auth-service on May 19, 2025)
 
 ### Ticket Service
 - Ticket management

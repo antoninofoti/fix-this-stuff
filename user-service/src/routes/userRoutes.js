@@ -6,9 +6,6 @@ const { authenticateRequest, authorizeAdmin, authorizeOwnerOrAdmin } = require('
 
 const router = express.Router();
 
-// Internal endpoint to get user by credential ID (no auth required - internal service call)
-router.get('/by-credential/:credentialId', userController.getUserByCredentialId);
-
 // Internal endpoint to create user (no auth required - internal service call)
 router.post('/internal/create', userController.createUserInternal);
 

@@ -97,9 +97,27 @@ const authorizeTicketAccess = (req, res, next) => {
   next();
 };
 
+/**
+ * Middleware to check if user has any authenticated role (developer, moderator, admin)
+ */
+const authorizeAuthenticated = (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({ message: 'Authentication required' });
+  }
+  
+  // Allow all authenticated users (developer, moderator, admin)
+  const allowedRoles = ['developer', 'moderator', 'admin'];
+  if (allowedRoles.includes(req.user.role)) {
+    return next();
+  }
+  
+  return res.status(403).json({ message: 'Requires valid user role' });
+};
+
 module.exports = {
   authenticateRequest,
   authorizeAdmin,
   authorizeModerator,
+  authorizeAuthenticated,
   authorizeTicketAccess
 };

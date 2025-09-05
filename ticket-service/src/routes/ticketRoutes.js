@@ -2,20 +2,20 @@ const express = require('express');
 const { body } = require('express-validator');
 const ticketController = require('../controllers/ticketController');
 // Import the enhanced authentication middleware
-const { authenticateRequest, authorizeAdmin, authorizeModerator, authorizeTicketAccess } = require('../middleware/enhancedAuthMiddleware');
+const { authenticateRequest, authorizeAdmin, authorizeModerator, authorizeAuthenticated, authorizeTicketAccess } = require('../middleware/enhancedAuthMiddleware');
 
 const router = express.Router();
 
-// Create a new ticket - requires authentication
-router.post('/', authenticateRequest, [
+// Create a new ticket - all authenticated users can create tickets
+router.post('/', authenticateRequest, authorizeAuthenticated, [
   body('title').notEmpty().withMessage('Title is required'),
   body('description').notEmpty().withMessage('Description is required'),
   body('category').notEmpty().withMessage('Category/system ID is required').isInt().withMessage('Category/system ID must be an integer'),
   body('priority').isIn(['low', 'medium', 'high']).withMessage('Invalid priority - must be low, medium, or high')
 ], ticketController.createTicket);
 
-// Get all tickets - now requires authentication
-router.get('/', authenticateRequest, ticketController.getAllTickets);
+// Get all tickets - all authenticated users (filtered by role in controller)
+router.get('/', authenticateRequest, authorizeAuthenticated, ticketController.getAllTickets);
 
 // Special route for admins/moderators to get all tickets with extended information
 router.get('/admin/all', authenticateRequest, authorizeModerator, ticketController.getAllTicketsAdmin);
@@ -41,7 +41,7 @@ router.put('/:ticketId/admin', authenticateRequest, authorizeModerator, [
   body('assigned_developer_id').optional().isInt().withMessage('Assigned developer ID must be an integer')
 ], ticketController.updateTicketAdmin);
 
-// Delete a ticket - requires admin privileges
-router.delete('/:ticketId', authenticateRequest, authorizeAdmin, ticketController.deleteTicket);
+// Delete a ticket - requires moderator or admin privileges
+router.delete('/:ticketId', authenticateRequest, authorizeModerator, ticketController.deleteTicket);
 
 module.exports = router;

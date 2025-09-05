@@ -43,15 +43,8 @@ const createTicket = async (req, res) => {
       });
     }
 
-    // Validate that the system exists
+    // Convert category to system_id (no validation needed)
     const systemId = parseInt(category, 10);
-    const systemExists = await ServiceRegistry.verifySystemExists(systemId);
-    if (!systemExists) {
-      console.error(`System ${systemId} does not exist`);
-      return res.status(400).json({ 
-        message: 'Invalid system ID - system does not exist'
-      });
-    }
 
     // Get current date plus 7 days for default deadline
     const deadline = new Date();

@@ -38,7 +38,7 @@ services:
       DB_PASSWORD: mysecretpassword
       DB_PORT: 5432
       JWT_SECRET: fix_this_stuff_secret_key_change_in_production
-      JWT_EXPIRATION: 86400
+      JWT_EXPIRATION: "24h"
       PORT: 3001
       NODE_ENV: development
     ports:
@@ -61,7 +61,7 @@ services:
       DB_PASSWORD: mysecretpassword
       DB_PORT: 5432
       JWT_SECRET: fix_this_stuff_secret_key_change_in_production
-      JWT_EXPIRATION: 86400
+      JWT_EXPIRATION: "24h"
       PORT: 3002
       NODE_ENV: development
       AUTH_SERVICE_URL: http://auth-service:3001
@@ -89,7 +89,7 @@ services:
       DB_PASSWORD: mysecretpassword
       DB_PORT: 5432
       JWT_SECRET: fix_this_stuff_secret_key_change_in_production
-      JWT_EXPIRATION: 86400
+      JWT_EXPIRATION: "24h"
       PORT: 3003
       NODE_ENV: development
       AUTH_SERVICE_URL: http://auth-service:3001

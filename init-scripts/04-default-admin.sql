@@ -1,8 +1,8 @@
 -- This script creates a default admin user during database initialization
 
 -- Create a default admin credential
-INSERT INTO credentials (username, password)
-SELECT 'admin', '$2b$10$qgolECo3lDkyyQsJqqbbpuKCKwPZmuvwTzJMnrAlGA5axiyCbVxYa' -- Default password: admin123 (hashed with bcrypt)
+INSERT INTO credentials (username, password, role)
+SELECT 'admin', '$2b$10$qgolECo3lDkyyQsJqqbbpuKCKwPZmuvwTzJMnrAlGA5axiyCbVxYa', 'admin' -- Default password: admin123 (hashed with bcrypt)
 WHERE NOT EXISTS (
     SELECT 1 FROM credentials WHERE username = 'admin'
 );

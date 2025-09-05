@@ -2,7 +2,6 @@ const express = require('express');
 const { body } = require('express-validator');
 const authController = require('../controllers/authController');
 const credentialController = require('../controllers/credentialController');
-const systemController = require('../controllers/systemController');
 const { authenticateRequest } = require('../middleware/auth_Middleware');
 
 // --- BEGIN DEBUG LOG ---
@@ -12,8 +11,6 @@ if (authController) console.log('authController keys:', Object.keys(authControll
 console.log('typeof credentialController:', typeof credentialController);
 if (credentialController) console.log('credentialController keys:', Object.keys(credentialController));
 console.log('typeof credentialController.getCredentialById:', typeof credentialController.getCredentialById);
-console.log('typeof systemController:', typeof systemController);
-if (systemController) console.log('systemController keys:', Object.keys(systemController));
 // --- END DEBUG LOG ---
 
 const router = express.Router();
@@ -47,10 +44,5 @@ router.get('/verify-token', authenticateRequest, authController.verifyToken);
 // Credential routes for microservice communication
 router.get('/credentials/:credentialId', credentialController.getCredentialById);
 router.get('/credentials/:credentialId/exists', credentialController.checkCredentialExists);
-
-// System routes for microservice communication
-router.get('/systems', systemController.getAllSystems);
-router.get('/systems/:systemId', systemController.getSystemById);
-router.get('/systems/:systemId/exists', systemController.checkSystemExists);
 
 module.exports = router;

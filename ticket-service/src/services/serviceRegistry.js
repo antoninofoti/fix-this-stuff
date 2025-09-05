@@ -61,22 +61,6 @@ class ServiceRegistry {
   }
 
   /**
-   * Verify if a system exists in the auth service
-   * @param {number} systemId - System ID to verify
-   * @returns {Promise<boolean>} True if the system exists
-   */
-  static async verifySystemExists(systemId) {
-    try {
-      const authServiceUrl = process.env.AUTH_SERVICE_URL || 'http://auth-service:3001';
-      const response = await axios.get(`${authServiceUrl}/api/auth/systems/${systemId}`);
-      return !!response.data.system;
-    } catch (error) {
-      console.error(`Error verifying system ${systemId}:`, error.message);
-      return false;
-    }
-  }
-
-  /**
    * Fetch aggregated ticket data with user details
    * @param {number} ticketId - Ticket ID to get complete data for
    * @returns {Promise<Object|null>} Complete ticket object with user details

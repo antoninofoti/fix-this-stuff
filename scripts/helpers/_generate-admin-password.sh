@@ -19,8 +19,8 @@ ADMIN_CREDENTIALS_ID=1
 
 if [ "$TARGET_DB" == "auth" ]; then
   # Ensure the hashed password, which includes special characters, is treated as a literal string in SQL.
-  echo "INSERT INTO credentials (username, password)
-        SELECT '${ADMIN_EMAIL_PARAM}', '${ADMIN_PASSWORD_HASHED_FOR_AUTH}' 
+  echo "INSERT INTO credentials (username, password, role)
+        SELECT '${ADMIN_EMAIL_PARAM}', '${ADMIN_PASSWORD_HASHED_FOR_AUTH}', 'admin'
         WHERE NOT EXISTS (
             SELECT 1 FROM credentials WHERE username = '${ADMIN_EMAIL_PARAM}'
         );"

@@ -36,22 +36,6 @@ class ServiceRegistry {
       return null;
     }
   }
-
-  /**
-   * Verify if a system exists in the auth service
-   * @param {number} systemId - System ID to verify
-   * @returns {Promise<boolean>} True if the system exists
-   */
-  static async verifySystemExists(systemId) {
-    try {
-      const authServiceUrl = process.env.AUTH_SERVICE_URL || 'http://auth-service:3001';
-      const response = await axios.get(`${authServiceUrl}/api/auth/systems/${systemId}`);
-      return !!response.data.system;
-    } catch (error) {
-      console.error(`Error verifying system ${systemId}:`, error.message);
-      return false;
-    }
-  }
 }
 
 module.exports = ServiceRegistry;

@@ -97,13 +97,27 @@ const login = async (req, res) => {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
-    // Step 2: Use role from credentials table (now includes role column)
-    let userRole = credential.role || 'developer'; // Use role from credentials or default
-    let userId = credential.id;
+    // Step 2: Get user data from user-service using credentialId
+    let userResponse;
+    try {
+      userResponse = await axios.get(`${USER_SERVICE_URL}/api/users/by-credential/${credential.id}`);
+    } catch (error) {
+      console.error('Error fetching user from user-service:', error.message);
+      return res.status(500).json({ message: 'Error fetching user profile' });
+    }
+
+    const userData = userResponse.data.user;
+    if (!userData) {
+      return res.status(404).json({ message: 'User profile not found' });
+    }
+
+    // Use role from user-service (most up-to-date)
+    let userRole = userData.role || 'developer';
+    let userId = userData.id; // This is the actual user ID from user-service
 
     // Generate JWT token with user information
     const tokenPayload = {
-      id: userId,
+      id: userId, // Use actual user ID from user-service
       credentialId: credential.id,
       username: credential.username,
       email: credential.username, // Email is stored as username
@@ -125,7 +139,7 @@ const login = async (req, res) => {
       message: 'Login successful',
       token,
       user: {
-        id: userId,
+        id: userId, // Use actual user ID from user-service
         credentialId: credential.id,
         email: credential.username,
         role: userRole
