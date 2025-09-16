@@ -1,0 +1,186 @@
+# comment-api/app.py
+from flask import Flask, request, jsonify
+from flask_sqlalchemy import SQLAlchemy
+from flask_cors import CORS
+import os
+import datetime
+import pika
+import json
+import requests
+from functools import wraps
+
+AUTH_SERVICE_URL = os.getenv("AUTH_SERVICE_URL", "http://auth-service:3001/api/auth")
+
+def token_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token = None
+        if 'Authorization' in request.headers:
+            auth_header = request.headers['Authorization']
+            if auth_header.startswith("Bearer "):
+                token = auth_header.split(" ")[1]
+        
+        if not token:
+            return jsonify({"message": "Token is missing"}), 401
+        
+        try:
+            resp = requests.get(
+                f"{AUTH_SERVICE_URL}/verify-token",
+                headers={"Authorization": f"Bearer {token}"}
+            )
+            if resp.status_code != 200:
+                return jsonify({"message": "Invalid or expired token"}), 401
+            
+            data = resp.json()
+            if not data.get("valid"):
+                return jsonify({"message": "Invalid token"}), 401
+            
+            # Attach user info to request
+            request.user = data["user"]  # {'id': 2, 'email': ..., 'role': ...}
+        except Exception as e:
+            return jsonify({"message": f"Token verification failed: {e}"}), 500
+
+        return f(*args, **kwargs)
+    return decorated
+
+
+app = Flask(__name__)
+CORS(app)
+
+
+# Configurations
+
+app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv("SQLALCHEMY_DATABASE_URI")
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['JWT_SECRET_KEY'] = os.getenv("JWT_SECRET", "defaultsecret")
+RABBITMQ_HOST = os.getenv("RABBITMQ_HOST", "rabbitmq")
+
+
+
+db = SQLAlchemy(app)
+
+
+# DB Model
+
+class Comment(db.Model):
+    __tablename__ = 'comment'
+    id = db.Column(db.Integer, primary_key=True)
+    comment_text = db.Column(db.Text, nullable=False)
+    author_id = db.Column(db.Integer, nullable=False)
+    ticket_id = db.Column(db.Integer, nullable=False)
+    creation_date = db.Column(
+        db.DateTime, default=datetime.datetime.now(datetime.timezone.utc)
+    )
+
+
+# Helper for RabbitMQ
+
+def publish_event(event_type, data):
+    try:
+        connection = pika.BlockingConnection(pika.ConnectionParameters(host=RABBITMQ_HOST))
+        channel = connection.channel()
+
+        # Declare exchange & queue
+        channel.exchange_declare(exchange="comments-exchange", exchange_type="direct", durable=True)
+        channel.queue_declare(queue="comments-queue", durable=True)
+        channel.queue_bind(
+            exchange="comments-exchange",
+            queue="comments-queue",
+            routing_key=f"comment.{event_type}"
+        )
+
+        # Publish message
+        channel.basic_publish(
+            exchange="comments-exchange",
+            routing_key=f"comment.{event_type}",
+            body=json.dumps(data),
+            properties=pika.BasicProperties(delivery_mode=2)
+        )
+
+        connection.close()
+        print(f"[✓] Published {event_type} event to RabbitMQ", flush=True)
+    except Exception as e:
+        print(f"[!] Failed to publish {event_type} event: {e}", flush=True)
+
+
+# Routes
+
+@app.route('/tickets/<int:ticket_id>/comments', methods=['GET'])
+def get_comments(ticket_id):
+    comments = Comment.query.filter_by(ticket_id=ticket_id).order_by(Comment.creation_date).all()
+    return jsonify([
+        {
+            "id": c.id,
+            "ticket_id": c.ticket_id,
+            "author_id": c.author_id,
+            "comment_text": c.comment_text,
+            "creation_date": c.creation_date.strftime("%Y-%m-%d %H:%M")
+        }
+        for c in comments
+    ])
+
+@app.route('/comments', methods=['POST'])
+@token_required
+def post_comment():
+    data = request.get_json()
+    comment_data = {
+        "ticket_id": data.get("ticket_id"),
+        "author_id": request.user.get("id"),  # TODO: replace with JWT user_id later
+        "comment_text": data.get("comment_text"),
+        "creation_date": datetime.datetime.now(datetime.timezone.utc).isoformat()
+    }
+
+    publish_event("created", comment_data)
+    return jsonify({"message": "Comment submitted successfully"}), 201
+
+@app.route('/comments/<int:comment_id>', methods=['PUT'])
+@token_required
+def update_comment(comment_id):
+    data = request.get_json()
+    new_text = data.get("comment_text")
+
+    if not new_text:
+        return jsonify({"message": "New comment_text is required"}), 400
+
+    comment = Comment.query.get(comment_id)
+    if not comment:
+        return jsonify({"message": "Comment not found"}), 404
+
+    comment.comment_text = new_text
+    db.session.commit()
+
+    event_data = {
+        "id": comment.id,
+        "ticket_id": comment.ticket_id,
+        "author_id": comment.author_id,
+        "comment_text": comment.comment_text,
+        "creation_date": comment.creation_date.isoformat()
+    }
+    publish_event("updated", event_data)
+
+    return jsonify({"message": "Comment updated successfully"})
+
+@app.route('/comments/<int:comment_id>', methods=['DELETE'])
+@token_required
+def delete_comment(comment_id):
+    comment = Comment.query.get(comment_id)
+    if not comment:
+        return jsonify({"message": "Comment not found"}), 404
+
+    db.session.delete(comment)
+    db.session.commit()
+
+    event_data = {"id": comment_id}
+    publish_event("deleted", event_data)
+
+    return jsonify({"message": "Comment deleted successfully"})
+
+@app.route('/health', methods=['GET'])
+def health():
+    return "OK", 200
+
+
+# Run
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5003)
