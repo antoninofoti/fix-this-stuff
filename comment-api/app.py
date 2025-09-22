@@ -104,6 +104,13 @@ def publish_event(event_type, data):
 
 
 # Routes
+@app.before_request
+def log_headers():
+    print("---- Incoming request headers ----")
+    for header, value in request.headers.items():
+        print(f"{header}: {value}")
+    print("---------------------------------")
+
 
 @app.route('/tickets/<int:ticket_id>/comments', methods=['GET'])
 def get_comments(ticket_id):
