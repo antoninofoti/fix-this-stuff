@@ -59,6 +59,21 @@ def callback(ch, method, properties, body):
             print("[✓] Inserted new comment into DB.", flush=True)
 
         elif method.routing_key == "comment.updated":
+
+            cursor.execute("SELECT author_id FROM comment WHERE id = %s", (event_data["id"],))
+            row = cursor.fetchone()
+
+            if not row:
+                print("[x] Comment not found — rejecting update")
+                return
+
+            author_id = row[0]
+            
+            
+            if author_id != event_data["requesting_user"]:
+                print("[x] Unauthorized update attempt — ignoring")
+                return
+
             cursor.execute(
                 """
                 UPDATE comment
@@ -70,6 +85,14 @@ def callback(ch, method, properties, body):
             print("[✓] Updated comment in DB.", flush=True)
 
         elif method.routing_key == "comment.deleted":
+
+            cursor.execute("SELECT * FROM comment WHERE id = %s", (event_data["id"],))
+            row = cursor.fetchone()
+
+            if not row:
+                print("[x] Comment not found — rejecting delete")
+                return
+
             cursor.execute(
                 "DELETE FROM comment WHERE id = %s",
                 (event_data["id"],)

@@ -138,7 +138,7 @@ def post_comment():
     }
 
     publish_event("created", comment_data)
-    return jsonify({"message": "Comment submitted successfully"}), 201
+    return jsonify({"message": "Comment submitted successfully to RabbitMQ"}), 201
 
 @app.route('/comments/<int:comment_id>', methods=['PUT'])
 @token_required
@@ -149,42 +149,44 @@ def update_comment(comment_id):
     if not new_text:
         return jsonify({"message": "New comment_text is required"}), 400
 
-    comment = Comment.query.get(comment_id)
-    if not comment:
-        return jsonify({"message": "Comment not found"}), 404
-
-    comment.comment_text = new_text
-    db.session.commit()
+    user_id = request.user.get("id")
 
     event_data = {
-        "id": comment.id,
-        "ticket_id": comment.ticket_id,
-        "author_id": comment.author_id,
-        "comment_text": comment.comment_text,
-        "creation_date": comment.creation_date.isoformat()
+        "id": comment_id,
+        "comment_text": new_text,
+        "requesting_user": user_id,
     }
+    
     publish_event("updated", event_data)
 
-    return jsonify({"message": "Comment updated successfully"})
+    return jsonify({"message": "Comment update request successfully submitted to rabbitMQ"})
+
 
 @app.route('/comments/<int:comment_id>', methods=['DELETE'])
 @token_required
 def delete_comment(comment_id):
-    comment = Comment.query.get(comment_id)
-    if not comment:
-        return jsonify({"message": "Comment not found"}), 404
+    #comment = Comment.query.get(comment_id)
+    #if not comment:
+    #    return jsonify({"message": "Comment not found"}), 404
 
-    db.session.delete(comment)
-    db.session.commit()
+    #db.session.delete(comment)
+    #db.session.commit()
 
     event_data = {"id": comment_id}
     publish_event("deleted", event_data)
 
-    return jsonify({"message": "Comment deleted successfully"})
+    return jsonify({"message": "Comment delete request successfully submitted to rabbitMQ"})
 
 @app.route('/health', methods=['GET'])
 def health():
-    return "OK", 200
+    #return "OK", 200
+    return jsonify({
+        "status": "OK",
+        "service": "comment-api",
+        "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat()
+    }), 200
+
+
 
 
 # Run
