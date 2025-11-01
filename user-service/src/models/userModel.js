@@ -59,7 +59,7 @@ const UserModel = {
   async getUserById(userId) {
     try {
       const query = `
-        SELECT u.id, u.email, u.name, u.surname, u.rank as role, u.registration_date as created_at, u.registration_date as updated_at
+        SELECT u.id, u.email, u.name, u.surname, u.role, u.registration_date as created_at, u.registration_date as updated_at
         FROM users u
         WHERE u.id = $1
       `;
@@ -80,7 +80,7 @@ const UserModel = {
   async getUserByEmail(email) {
     try {
       const query = `
-        SELECT u.id, u.email, u.name, u.surname, u.rank as role, u.credentials_id
+        SELECT u.id, u.email, u.name, u.surname, u.role, u.credentials_id
         FROM users u
         WHERE u.email = $1
       `;
@@ -145,7 +145,7 @@ const UserModel = {
   async findByEmail(email) {
     try {
       const query = `
-        SELECT id, email, name, surname, rank as role, credentials_id, registration_date
+        SELECT id, email, name, surname, role, credentials_id, registration_date
         FROM users
         WHERE email = $1
       `;
@@ -165,7 +165,7 @@ const UserModel = {
   async findByCredentialsId(credentialsId) {
     try {
       const query = `
-        SELECT id, email, name, surname, rank as role, credentials_id, registration_date
+        SELECT id, email, name, surname, role, credentials_id, registration_date
         FROM users
         WHERE credentials_id = $1
       `;
@@ -244,7 +244,7 @@ const UserModel = {
           UPDATE users
           SET ${updates.join(', ')}
           WHERE id = $${paramIndex}
-          RETURNING id, email, name, surname, rank as role, registration_date as created_at
+          RETURNING id, email, name, surname, role, registration_date as created_at
         `;
 
         const result = await client.query(query, values);
@@ -376,7 +376,7 @@ const UserModel = {
   async getUserByCredentialId(credentialsId) {
     try {
       const query = `
-        SELECT u.id, u.email, u.name as firstName, u.surname as lastName, u.rank as role, u.credentials_id, u.registration_date as created_at
+        SELECT u.id, u.email, u.name as firstName, u.surname as lastName, u.role, u.credentials_id, u.registration_date as created_at
         FROM users u
         WHERE u.credentials_id = $1
       `;
@@ -398,9 +398,9 @@ const UserModel = {
       const { email, firstName, lastName, role, credentialsId } = userData;
       
       const query = `
-        INSERT INTO users (email, name, surname, rank, credentials_id, registration_date)
+        INSERT INTO users (email, name, surname, role, credentials_id, registration_date)
         VALUES ($1, $2, $3, $4, $5, NOW())
-        RETURNING id, email, name as firstName, surname as lastName, rank as role, credentials_id, registration_date as created_at
+        RETURNING id, email, name as firstName, surname as lastName, role, credentials_id, registration_date as created_at
       `;
       
       const { rows } = await db.query(query, [email, firstName, lastName, role || 'developer', credentialsId]);

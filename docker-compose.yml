@@ -123,20 +123,24 @@ services:
       - ticket-service
     networks:
       - fts-network
-#PARTE AGGIUNTA DA ME(LEONARDO)
+
+  # RabbitMQ for comment events (added by Leonardo)
   rabbitmq:
     image: rabbitmq:3-management
+    container_name: rabbitmq-fts
     ports:
-      - "5672:5672"
-      - "15672:15672"
+      - "5672:5672"   # AMQP protocol
+      - "15672:15672" # Management UI
     environment:
       RABBITMQ_DEFAULT_USER: guest
       RABBITMQ_DEFAULT_PASS: guest
     networks:
       - fts-network
 
+  # Comment API service (Python FastAPI)
   comment-api:
     build: ./comment-api
+    container_name: comment-api
     ports:
       - "5003:5003"
     environment:
@@ -145,19 +149,20 @@ services:
       DB_NAME: ticketdb
       DB_PASSWORD: mysecretpassword
       DB_PORT: 5432
-      JWT_SECRET: supersecret
+      JWT_SECRET: fix_this_stuff_secret_key_change_in_production
       RABBITMQ_HOST: rabbitmq
       SQLALCHEMY_DATABASE_URI: postgresql://postgres:mysecretpassword@postgres:5432/ticketdb
-      
     depends_on:
       - postgres
       - rabbitmq
     networks:
       - fts-network
   
+  # Comments consumer service (Python)
   comments-service:
     build:
       context: ./comments-service
+    container_name: comments-service
     depends_on:
       - postgres
       - rabbitmq
@@ -171,7 +176,26 @@ services:
       PYTHONUNBUFFERED: 1
     networks:
       - fts-network
-    
+
+  # Frontend UI (Vue.js)
+  ui:
+    build:
+      context: ./ui
+      args:
+        # Build-time variables for Vite
+        VITE_AUTH_API_URL: http://localhost:8081/api/auth
+        VITE_USER_API_URL: http://localhost:8081/api/users
+        VITE_TICKET_API_URL: http://localhost:8081/api/tickets
+        VITE_ROLE_API_URL: http://localhost:8081/api/roles
+        VITE_COMMENT_API_URL: http://localhost:5003/api/comments
+    container_name: ui-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - api-gateway
+    networks:
+      - fts-network
+
 networks:
   fts-network:
     driver: bridge

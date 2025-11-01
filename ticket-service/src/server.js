@@ -21,10 +21,10 @@ app.use((req, res, next) => {
 });
 
 // Routes - authentication is handled at the route level
-app.use('/api/tickets', ticketRoutes);
+app.use('/tickets', ticketRoutes);
 
 // Health check route
-app.get('/api/health', async (req, res) => {
+app.get('/health', async (req, res) => {
   try {
     // Import database module
     const db = require('./config/db');

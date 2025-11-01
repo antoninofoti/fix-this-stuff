@@ -37,15 +37,20 @@ public class ApiGatewayController {
         /**
      * Forward requests to auth service (no authentication required)
      */
-    @RequestMapping(value = "/auth/**", method = {RequestMethod.GET, RequestMethod.POST, RequestMethod.PUT, RequestMethod.DELETE})
+    @RequestMapping(value = "/auth/**", method = {RequestMethod.GET, RequestMethod.POST, RequestMethod.PUT, RequestMethod.DELETE, RequestMethod.OPTIONS})
     public ResponseEntity<String> forwardToAuthService(
             HttpServletRequest request,
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @RequestHeader(value = "Content-Type", required = false) String contentType,
             @RequestBody(required = false) String body) {
         
+        // Handle OPTIONS requests for CORS preflight
+        if ("OPTIONS".equals(request.getMethod())) {
+            return ResponseEntity.ok().build();
+        }
+        
         String path = request.getRequestURI().substring("/api/auth".length());
-        String url = "http://auth-service:3001/api/auth" + path;
+        String url = "http://auth-service:3001/auth" + path;
         
         HttpHeaders headers = new HttpHeaders();
         if (authorization != null) {
@@ -62,42 +67,52 @@ public class ApiGatewayController {
     /**
      * Forward requests to user service (authentication required)
      */
-    @RequestMapping(value = "/users/**", method = {RequestMethod.GET, RequestMethod.POST, RequestMethod.PUT, RequestMethod.DELETE})
+    @RequestMapping(value = "/users/**", method = {RequestMethod.GET, RequestMethod.POST, RequestMethod.PUT, RequestMethod.DELETE, RequestMethod.OPTIONS})
     public ResponseEntity<String> forwardToUserService(
             HttpServletRequest request,
-            @RequestBody(required = false) String body,
-            @RequestHeader(value = "x-user", required = false) String userId,
-            @RequestHeader(value = "x-role", required = false) String userRole) {
-
-        return forwardRequest(request, body, userServiceUrl, userId, userRole);
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @RequestHeader(value = "Content-Type", required = false) String contentType,
+            @RequestBody(required = false) String body) {
+        
+        // Handle OPTIONS requests for CORS preflight
+        if ("OPTIONS".equals(request.getMethod())) {
+            return ResponseEntity.ok().build();
+        }
+        
+        return forwardRequest(request, "http://user-service:3002", authorization, contentType, body);
     }
 
     /**
      * Forward requests to comment-service
      */
-    @RequestMapping(
-    value = {"/comments/**", "/tickets/{ticketId}/comments/**"},
-    method = {RequestMethod.GET, RequestMethod.POST, RequestMethod.PUT, RequestMethod.DELETE}
-    )
+    @RequestMapping(value = "/comments/**", method = {RequestMethod.GET, RequestMethod.POST, RequestMethod.PUT, RequestMethod.DELETE, RequestMethod.OPTIONS})
     public ResponseEntity<String> forwardToCommentService(
             HttpServletRequest request,
-            @RequestBody(required = false) String body,
-            @RequestHeader(value = "x-user", required = false) String userId,
-            @RequestHeader(value = "x-role", required = false) String userRole) {
-
-        return forwardRequestWithToken(request, body, commentServiceUrl, userId, userRole);
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @RequestHeader(value = "Content-Type", required = false) String contentType,
+            @RequestBody(required = false) String body) {
+        
+        // Handle OPTIONS requests for CORS preflight
+        if ("OPTIONS".equals(request.getMethod())) {
+            return ResponseEntity.ok().build();
+        }
+        
+        return forwardRequest(request, "http://comment-api:5003", authorization, contentType, body);
     }
-
-
     /**
      * Forward requests to ticket-service
      */
-    @RequestMapping(value = "/tickets/**", method = {RequestMethod.GET, RequestMethod.POST, RequestMethod.PUT, RequestMethod.DELETE})
+    @RequestMapping(value = "/tickets/**", method = {RequestMethod.GET, RequestMethod.POST, RequestMethod.PUT, RequestMethod.DELETE, RequestMethod.OPTIONS})
     public ResponseEntity<String> forwardToTicketService(
             HttpServletRequest request,
             @RequestBody(required = false) String body,
             @RequestHeader(value = "x-user", required = false) String userId,
             @RequestHeader(value = "x-role", required = false) String userRole) {
+
+        // Handle OPTIONS requests for CORS preflight
+        if ("OPTIONS".equals(request.getMethod())) {
+            return ResponseEntity.ok().build();
+        }
 
         return forwardRequest(request, body, ticketServiceUrl, userId, userRole);
     }
@@ -130,22 +145,30 @@ public class ApiGatewayController {
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
             
-            // Add trusted headers injected by AuthFilter
+            // Add trusted headers injected by AuthFilter (NOT from frontend!)
+            // AuthFilter validates JWT and extracts these from the token
             if (userId != null) {
                 headers.set("x-user", userId);
             }
             if (userRole != null) {
                 headers.set("x-role", userRole);
             }
+            
+            // Copy X-Internal-Auth if present (added by AuthFilter)
+            String internalAuth = request.getHeader("X-Internal-Auth");
+            if (internalAuth != null) {
+                headers.set("X-Internal-Auth", internalAuth);
+            }
 
             // Copy other relevant headers from original request
             Enumeration<String> headerNames = request.getHeaderNames();
             while (headerNames.hasMoreElements()) {
                 String headerName = headerNames.nextElement();
-                // Skip authorization header and our custom headers
+                // Skip sensitive/internal headers - they're handled separately above
                 if (!headerName.equalsIgnoreCase("authorization") && 
                     !headerName.equalsIgnoreCase("x-user") && 
-                    !headerName.equalsIgnoreCase("x-role")) {
+                    !headerName.equalsIgnoreCase("x-role") &&
+                    !headerName.equalsIgnoreCase("X-Internal-Auth")) {
                     headers.set(headerName, request.getHeader(headerName));
                 }
             }
