@@ -1,6 +1,7 @@
+
 services:
   postgres:
-    image: postgres:latest
+    image: postgres:16
     container_name: postgres-fts
     environment:
       POSTGRES_PASSWORD: mysecretpassword
@@ -122,7 +123,55 @@ services:
       - ticket-service
     networks:
       - fts-network
+#PARTE AGGIUNTA DA ME(LEONARDO)
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    networks:
+      - fts-network
 
+  comment-api:
+    build: ./comment-api
+    ports:
+      - "5003:5003"
+    environment:
+      DB_USER: postgres
+      DB_HOST: postgres
+      DB_NAME: ticketdb
+      DB_PASSWORD: mysecretpassword
+      DB_PORT: 5432
+      JWT_SECRET: supersecret
+      RABBITMQ_HOST: rabbitmq
+      SQLALCHEMY_DATABASE_URI: postgresql://postgres:mysecretpassword@postgres:5432/ticketdb
+      
+    depends_on:
+      - postgres
+      - rabbitmq
+    networks:
+      - fts-network
+  
+  comments-service:
+    build:
+      context: ./comments-service
+    depends_on:
+      - postgres
+      - rabbitmq
+    environment:
+      DB_USER: postgres
+      DB_HOST: postgres
+      DB_NAME: ticketdb
+      DB_PASSWORD: mysecretpassword
+      DB_PORT: 5432
+      RABBITMQ_HOST: rabbitmq
+      PYTHONUNBUFFERED: 1
+    networks:
+      - fts-network
+    
 networks:
   fts-network:
     driver: bridge
