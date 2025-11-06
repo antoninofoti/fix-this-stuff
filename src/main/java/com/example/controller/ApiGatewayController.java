@@ -79,7 +79,7 @@ public class ApiGatewayController {
             return ResponseEntity.ok().build();
         }
         
-        return forwardRequest(request, "http://user-service:3002", authorization, contentType, body);
+        return forwardRequestSimple(request, "http://user-service:3002/api", authorization, contentType, body);
     }
 
     /**
@@ -97,7 +97,7 @@ public class ApiGatewayController {
             return ResponseEntity.ok().build();
         }
         
-        return forwardRequest(request, "http://comment-api:5003", authorization, contentType, body);
+        return forwardRequestSimple(request, "http://comment-api:5003/api", authorization, contentType, body);
     }
     /**
      * Forward requests to ticket-service
@@ -252,6 +252,74 @@ public class ApiGatewayController {
 
             return response;
 
+        } catch (HttpClientErrorException e) {
+            return ResponseEntity.status(e.getStatusCode())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(e.getResponseBodyAsString());
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body("{\"error\":\"Gateway error: " + e.getMessage() + "\"}");
+        }
+    }
+
+    /**
+     * Simple method to forward requests without authentication (for public endpoints)
+     */
+    private ResponseEntity<String> forwardRequestSimple(
+            HttpServletRequest request,
+            String serviceUrl,
+            String authorization,
+            String contentType,
+            String body) {
+        
+        try {
+            // Extract the path after /api/
+            String originalPath = request.getRequestURI();
+            String servicePath = originalPath.substring(4); // Remove "/api"
+            String targetUrl = serviceUrl + servicePath;
+            
+            // Add query parameters if present
+            String queryString = request.getQueryString();
+            if (queryString != null) {
+                targetUrl += "?" + queryString;
+            }
+            
+            // Create headers
+            HttpHeaders headers = new HttpHeaders();
+            if (authorization != null) {
+                headers.set("Authorization", authorization);
+            }
+            if (contentType != null) {
+                headers.set("Content-Type", contentType);
+            }
+            
+            // Copy X-Internal-Auth and x-user headers if present (added by AuthFilter)
+            String internalAuth = request.getHeader("X-Internal-Auth");
+            if (internalAuth != null) {
+                headers.set("X-Internal-Auth", internalAuth);
+            }
+            
+            String userId = request.getHeader("x-user");
+            if (userId != null) {
+                headers.set("x-user", userId);
+            }
+            
+            String userRole = request.getHeader("x-role");
+            if (userRole != null) {
+                headers.set("x-role", userRole);
+            }
+            
+            String username = request.getHeader("x-username");
+            if (username != null) {
+                headers.set("x-username", username);
+            }
+            
+            HttpEntity<String> entity = new HttpEntity<>(body, headers);
+            HttpMethod method = HttpMethod.valueOf(request.getMethod());
+            
+            return restTemplate.exchange(targetUrl, method, entity, String.class);
+            
         } catch (HttpClientErrorException e) {
             return ResponseEntity.status(e.getStatusCode())
                     .contentType(MediaType.APPLICATION_JSON)

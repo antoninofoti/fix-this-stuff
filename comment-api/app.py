@@ -113,6 +113,7 @@ def log_headers():
 
 
 @app.route('/tickets/<int:ticket_id>/comments', methods=['GET'])
+@token_required
 def get_comments(ticket_id):
     comments = Comment.query.filter_by(ticket_id=ticket_id).order_by(Comment.creation_date).all()
     return jsonify([

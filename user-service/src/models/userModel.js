@@ -419,6 +419,51 @@ const UserModel = {
    */
   async validatePassword(password, hashedPassword) {
     return bcrypt.compare(password, hashedPassword);
+  },
+
+  /**
+   * Updates user rank
+   * @param {number} userId - User ID
+   * @param {number} newRank - New rank value
+   * @returns {Promise<Object>} Updated user
+   */
+  async updateUserRank(userId, newRank) {
+    try {
+      const query = `
+        UPDATE users
+        SET rank = $1
+        WHERE id = $2
+        RETURNING id, email, name, surname, role, rank, registration_date
+      `;
+      
+      const { rows } = await db.query(query, [newRank, userId]);
+      return rows[0];
+    } catch (error) {
+      console.error(`Error updating rank for user ${userId}:`, error);
+      throw error;
+    }
+  },
+
+  /**
+   * Get leaderboard - users ordered by rank
+   * @param {number} limit - Maximum number of users to return (default: 10)
+   * @returns {Promise<Array>} List of top users by rank
+   */
+  async getLeaderboard(limit = 10) {
+    try {
+      const query = `
+        SELECT id, name, surname, email, role, rank, registration_date
+        FROM users
+        ORDER BY rank DESC, registration_date ASC
+        LIMIT $1
+      `;
+      
+      const { rows } = await db.query(query, [limit]);
+      return rows;
+    } catch (error) {
+      console.error('Error getting leaderboard:', error);
+      throw error;
+    }
   }
 };
 

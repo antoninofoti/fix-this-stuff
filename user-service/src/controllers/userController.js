@@ -350,6 +350,110 @@ const internalGetUserById = async (req, res) => {
   }
 };
 
+/**
+ * Internal endpoint to update user rank based on ticket rating
+ */
+const updateUserRank = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { rating } = req.body;
+    
+    // Validate rating
+    if (!rating || rating < 1 || rating > 5) {
+      return res.status(400).json({ message: 'Rating must be between 1 and 5' });
+    }
+    
+    const user = await userModel.getUserById(userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    // Update user rank - increment by rating value
+    const currentRank = user.rank || 0;
+    const newRank = currentRank + rating;
+    
+    await userModel.updateUserRank(userId, newRank);
+    
+    res.status(200).json({ 
+      message: 'User rank updated successfully',
+      userId,
+      previousRank: currentRank,
+      newRank,
+      ratingReceived: rating
+    });
+  } catch (error) {
+    console.error('Error in updateUserRank:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+/**
+ * Internal endpoint to update user score based on ticket resolution
+ */
+const updateUserScore = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { points } = req.body;
+    
+    // Validate points
+    if (points === undefined || points === null) {
+      return res.status(400).json({ message: 'Points value is required' });
+    }
+    
+    const user = await userModel.getUserById(userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    // Update user score - increment by points
+    const currentScore = user.rank || 0; // Using 'rank' field as score
+    const newScore = currentScore + points;
+    
+    await userModel.updateUserRank(userId, newScore);
+    
+    res.status(200).json({ 
+      message: 'User score updated successfully',
+      userId,
+      previousScore: currentScore,
+      newScore,
+      pointsAwarded: points
+    });
+  } catch (error) {
+    console.error('Error in updateUserScore:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+/**
+ * Get leaderboard of users by rank
+ */
+const getLeaderboard = async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 10;
+    
+    // Validate limit
+    if (limit < 1 || limit > 100) {
+      return res.status(400).json({ message: 'Limit must be between 1 and 100' });
+    }
+    
+    const leaderboard = await userModel.getLeaderboard(limit);
+    
+    // Add position to each user
+    const leaderboardWithPosition = leaderboard.map((user, index) => ({
+      position: index + 1,
+      ...user
+    }));
+    
+    res.status(200).json({ 
+      leaderboard: leaderboardWithPosition,
+      count: leaderboard.length
+    });
+  } catch (error) {
+    console.error('Error in getLeaderboard:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
 module.exports = {
   getAllUsers,
   getUserById,
@@ -361,5 +465,8 @@ module.exports = {
   internalGetUserById, // Add internal getUserById
   getUsersByRole,
   updateUserRole,
-  getPrivilegedUsers
+  getPrivilegedUsers,
+  updateUserRank,
+  updateUserScore,
+  getLeaderboard
 };

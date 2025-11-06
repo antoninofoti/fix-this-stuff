@@ -386,6 +386,76 @@ const TicketModel = {
       console.error('Error adding comment:', error);
       throw error;
     }
+  },
+
+  /**
+   * Creates a rating for a resolved ticket
+   * @param {Object} ratingData - Data for the rating (ticket_id, rating, comment, rated_by)
+   * @returns {Promise<Object>} Created rating
+   */
+  async createTicketRating(ratingData) {
+    const client = await db.getClient();
+    try {
+      await client.query('BEGIN');
+      
+      // Check if rating already exists for this ticket
+      const checkQuery = `SELECT id FROM ticket_rating WHERE ticket_id = $1`;
+      const checkResult = await client.query(checkQuery, [ratingData.ticket_id]);
+      
+      if (checkResult.rows.length > 0) {
+        throw new Error('This ticket has already been rated');
+      }
+      
+      // Insert rating
+      const insertQuery = `
+        INSERT INTO ticket_rating (ticket_id, rating, comment, rated_by)
+        VALUES ($1, $2, $3, $4)
+        RETURNING *
+      `;
+      
+      const { rows } = await client.query(insertQuery, [
+        ratingData.ticket_id,
+        ratingData.rating,
+        ratingData.comment || null,
+        ratingData.rated_by
+      ]);
+      
+      // Update ticket with rating_id
+      await client.query(
+        'UPDATE ticket SET rating_id = $1 WHERE id = $2',
+        [rows[0].id, ratingData.ticket_id]
+      );
+      
+      await client.query('COMMIT');
+      return rows[0];
+    } catch (error) {
+      await client.query('ROLLBACK');
+      console.error('Error creating ticket rating:', error);
+      throw error;
+    } finally {
+      client.release();
+    }
+  },
+
+  /**
+   * Retrieves the rating for a ticket
+   * @param {number} ticketId - Ticket ID
+   * @returns {Promise<Object|null>} Rating object or null
+   */
+  async getTicketRating(ticketId) {
+    try {
+      const query = `
+        SELECT tr.*
+        FROM ticket_rating tr
+        WHERE tr.ticket_id = $1
+      `;
+      
+      const { rows } = await db.query(query, [ticketId]);
+      return rows.length > 0 ? rows[0] : null;
+    } catch (error) {
+      console.error(`Error retrieving rating for ticket ${ticketId}:`, error);
+      throw error;
+    }
   }
 };
 

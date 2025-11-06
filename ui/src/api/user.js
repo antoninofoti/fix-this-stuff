@@ -14,4 +14,10 @@ userApi.interceptors.request.use((config) => {
   return config;
 }, (error) => Promise.reject(error));
 
+// Get leaderboard
+export const getLeaderboard = async (limit = 10) => {
+  const response = await userApi.get(`/users/leaderboard?limit=${limit}`);
+  return response.data;
+};
+
 export default userApi;

@@ -44,4 +44,13 @@ router.put('/:ticketId/admin', authenticateRequest, authorizeModerator, [
 // Delete a ticket - requires moderator or admin privileges
 router.delete('/:ticketId', authenticateRequest, authorizeModerator, ticketController.deleteTicket);
 
+// Rate a ticket - requires authentication and must be the ticket requester
+router.post('/:ticketId/rating', authenticateRequest, authorizeAuthenticated, [
+  body('rating').isInt({ min: 1, max: 5 }).withMessage('Rating must be between 1 and 5'),
+  body('comment').optional().isString().withMessage('Comment must be a string')
+], ticketController.rateTicket);
+
+// Get rating for a ticket
+router.get('/:ticketId/rating', ticketController.getTicketRating);
+
 module.exports = router;

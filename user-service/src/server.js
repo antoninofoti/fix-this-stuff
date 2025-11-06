@@ -25,17 +25,20 @@ app.use((req, res, next) => {
 });
 
 // Internal routes (no authentication required)
-app.post('/users/internal/create', userController.internalCreateUser);
-app.get('/users/internal/:userId', userController.internalGetUserById);
-app.get('/users/by-credential/:credentialId', userController.getUserByCredentialId);
+app.post('/api/users/internal/create', userController.internalCreateUser);
+app.get('/api/users/internal/:userId', userController.internalGetUserById);
+app.get('/api/users/by-credential/:credentialId', userController.getUserByCredentialId);
+
+// Public routes (no authentication required)
+app.get('/api/users/leaderboard', userController.getLeaderboard);
 
 // Protected routes
-app.use('/users', authenticateRequest, userRoutes);
-app.use('/moderators', moderatorRoutes);
-app.use('/roles', roleRoutes);
+app.use('/api/users', authenticateRequest, userRoutes);
+app.use('/api/moderators', moderatorRoutes);
+app.use('/api/roles', roleRoutes);
 
 // Health check route
-app.get('/health', async (req, res) => {
+app.get('/api/health', async (req, res) => {
   try {
     // Import database module
     const db = require('./config/db');

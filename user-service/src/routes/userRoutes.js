@@ -9,6 +9,18 @@ const router = express.Router();
 // Internal endpoint to create user (no auth required - internal service call)
 router.post('/internal/create', userController.createUserInternal);
 
+// Internal endpoint to get user by ID (no auth required - internal service call)
+router.get('/internal/:userId', userController.internalGetUserById);
+
+// Internal endpoint to update user rank (no auth required - internal service call)
+router.patch('/internal/:userId/rank', userController.updateUserRank);
+
+// Internal endpoint to update user score (no auth required - internal service call)
+router.patch('/internal/:userId/score', userController.updateUserScore);
+
+// Get leaderboard (public endpoint - no authentication required)
+router.get('/leaderboard', userController.getLeaderboard);
+
 // Get all users (admin only)
 router.get('/', authenticateRequest, authorizeAdmin, userController.getAllUsers);
 

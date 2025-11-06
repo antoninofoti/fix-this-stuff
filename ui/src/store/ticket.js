@@ -117,6 +117,42 @@ export const useTicketStore = defineStore('ticket', {
       }
     },
 
+    async rateTicket(ticketId, ratingData) {
+      this.loading = true;
+      this.error = null;
+      try {
+        const response = await ticketApi.post(`/${ticketId}/rating`, ratingData);
+        
+        // Update current ticket if needed
+        if (this.currentTicket?.id === ticketId) {
+          // Refetch the ticket to get updated data
+          await this.fetchTicketByID(ticketId);
+        }
+        
+        return response.data.rating;
+      } catch (error) {
+        this.error = error.response?.data?.message || error.message || 'Failed to rate ticket.';
+        console.error('Error rating ticket:', error);
+        throw error;
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    async fetchTicketRating(ticketId) {
+      try {
+        const response = await ticketApi.get(`/${ticketId}/rating`);
+        return response.data.rating;
+      } catch (error) {
+        // Return null if no rating exists (404 is expected)
+        if (error.response?.status === 404) {
+          return null;
+        }
+        console.error('Error fetching ticket rating:', error);
+        throw error;
+      }
+    },
+
     clearError() {
       this.error = null;
     },

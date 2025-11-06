@@ -43,7 +43,7 @@ const register = async (req, res) => {
 
     // Step 3: Create user profile in user-service by calling its API
     try {
-      const userResponse = await axios.post(`${USER_SERVICE_URL}/users/internal/create`, {
+      const userResponse = await axios.post(`${USER_SERVICE_URL}/api/users/internal/create`, {
         email,
         firstName,
         lastName,
@@ -51,7 +51,8 @@ const register = async (req, res) => {
         credentialsId: newCredential.id // Pass the ID from the newly created credential
       });
 
-      res.status(201).json({
+      return res.status(201).json({
+        success: true,
         message: 'User registered successfully',
         user: userResponse.data.user, // Return user data from user-service
         credentialId: newCredential.id
@@ -100,7 +101,7 @@ const login = async (req, res) => {
     // Step 2: Get user data from user-service using credentialId
     let userResponse;
     try {
-      userResponse = await axios.get(`${USER_SERVICE_URL}/users/by-credential/${credential.id}`);
+      userResponse = await axios.get(`${USER_SERVICE_URL}/api/users/by-credential/${credential.id}`);
     } catch (error) {
       console.error('Error fetching user from user-service:', error.message);
       return res.status(500).json({ message: 'Error fetching user profile' });

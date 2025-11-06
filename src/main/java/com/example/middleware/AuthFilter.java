@@ -45,6 +45,12 @@ public class AuthFilter implements Filter {
             return;
         }
         
+        // Skip authentication for leaderboard endpoint (public)
+        if (requestURI.equals("/api/users/leaderboard") && "GET".equals(method)) {
+            chain.doFilter(request, response);
+            return;
+        }
+        
         String internalAuthHeader = httpRequest.getHeader("X-Internal-Auth");
         if (internalAuthHeader != null) {
             sendUnauthorizedResponse(httpResponse, "X-Internal-Auth header is not allowed from external requests");
