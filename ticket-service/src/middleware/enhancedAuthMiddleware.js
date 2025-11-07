@@ -14,7 +14,6 @@ const authenticateRequest = (req, res, next) => {
   if (internalAuthHeader === 'true') {
     // Request is coming from the API Gateway, trust the headers
     if (userIdHeader && roleHeader) {
-      console.log(`Request authenticated via API Gateway: user=${userIdHeader}, role=${roleHeader}`);
       req.user = { 
         id: parseInt(userIdHeader),
         username: usernameHeader || userIdHeader,
@@ -36,7 +35,6 @@ const authenticateRequest = (req, res, next) => {
     
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      console.log(`Request authenticated via JWT: user=${decoded.username}, role=${decoded.role}`);
       req.user = {
         id: decoded.id,
         username: decoded.username || decoded.email,
@@ -45,14 +43,57 @@ const authenticateRequest = (req, res, next) => {
       };
       return next();
     } catch (err) {
-      console.log('JWT validation failed:', err.message);
       return res.status(401).json({ message: 'Invalid or expired token' });
     }
   }
   
   // No valid authentication found
-  console.log('Missing API Gateway authentication headers and no valid JWT token');
   return res.status(401).json({ message: 'Unauthorized request - missing authentication' });
+};
+
+/**
+ * Middleware for optional authentication - allows both authenticated and guest access
+ */
+const optionalAuthentication = (req, res, next) => {
+  const internalAuthHeader = req.headers['x-internal-auth'];
+  const userIdHeader = req.headers['x-user'];
+  const roleHeader = req.headers['x-role'];
+  const usernameHeader = req.headers['x-username'];
+
+  if (internalAuthHeader === 'true') {
+    // Request is coming from the API Gateway, trust the headers
+    if (userIdHeader && roleHeader) {
+      req.user = { 
+        id: parseInt(userIdHeader),
+        username: usernameHeader || userIdHeader,
+        role: roleHeader
+      };
+      return next();
+    }
+  }
+  
+  // Method 2: Check for JWT token in Authorization header
+  const authHeader = req.headers['authorization'];
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.split(' ')[1];
+    
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      req.user = {
+        id: decoded.id,
+        username: decoded.username || decoded.email,
+        role: decoded.role,
+        credentialId: decoded.credentialId
+      };
+      return next();
+    } catch (err) {
+      // Continue as guest
+    }
+  }
+  
+  // No authentication found, but allow as guest
+  req.user = null;
+  next();
 };
 
 /**
@@ -62,7 +103,6 @@ const authorizeAdmin = (req, res, next) => {
   if (!req.user || req.user.role !== 'admin') {
     return res.status(403).json({ message: 'Requires admin privileges' });
   }
-  console.log(`Admin access granted for user ${req.user.username}`);
   next();
 };
 
@@ -73,7 +113,6 @@ const authorizeModerator = (req, res, next) => {
   if (!req.user || (req.user.role !== 'moderator' && req.user.role !== 'admin')) {
     return res.status(403).json({ message: 'Requires moderator privileges' });
   }
-  console.log(`Moderator access granted for user ${req.user.username} with role ${req.user.role}`);
   next();
 };
 
@@ -116,6 +155,7 @@ const authorizeAuthenticated = (req, res, next) => {
 
 module.exports = {
   authenticateRequest,
+  optionalAuthentication,
   authorizeAdmin,
   authorizeModerator,
   authorizeAuthenticated,

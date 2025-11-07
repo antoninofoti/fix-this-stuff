@@ -8,8 +8,18 @@ const authRoutes = require('./routes/authRoutes');
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// CORS configuration
+const corsOptions = {
+  origin: '*', // Allow all origins (API Gateway will handle the filtering)
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Internal-Auth', 'x-user', 'x-role', 'x-username'],
+  exposedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true,
+  maxAge: 3600
+};
+
 // Middleware
-app.use(cors());
+app.use(cors(corsOptions));
 app.use(express.json());
 
 // Request logging
@@ -19,10 +29,10 @@ app.use((req, res, next) => {
 });
 
 // Public routes
-app.use('/api/auth', authRoutes);
+app.use('/auth', authRoutes);
 
 // Simple health check route for API Gateway
-app.get('/api/auth/health', (req, res) => {
+app.get('/auth/health', (req, res) => {
   res.status(200).json({ 
     status: 'OK', 
     service: 'auth-service', 
@@ -31,7 +41,7 @@ app.get('/api/auth/health', (req, res) => {
 });
 
 // Health check route
-app.get('/api/health', async (req, res) => {
+app.get('/health', async (req, res) => {
   try {
     // Import database module
     const db = require('./config/db');

@@ -59,7 +59,7 @@ const UserModel = {
   async getUserById(userId) {
     try {
       const query = `
-        SELECT u.id, u.email, u.name, u.surname, u.rank as role, u.registration_date as created_at, u.registration_date as updated_at
+        SELECT u.id, u.email, u.name, u.surname, u.role, u.registration_date as created_at, u.registration_date as updated_at
         FROM users u
         WHERE u.id = $1
       `;
@@ -80,7 +80,7 @@ const UserModel = {
   async getUserByEmail(email) {
     try {
       const query = `
-        SELECT u.id, u.email, u.name, u.surname, u.rank as role, u.credentials_id
+        SELECT u.id, u.email, u.name, u.surname, u.role, u.credentials_id
         FROM users u
         WHERE u.email = $1
       `;
@@ -93,51 +93,6 @@ const UserModel = {
   },
 
   /**
-   * Creates a new user profile in the database (called by auth-service)
-   * @param {Object} userData - Data for the new user (email, firstName, lastName, role, credentialsId)
-   * @returns {Promise<Object>} Created user profile
-   */
-  async create(userData) {
-    try {
-      const { email, firstName, lastName, role, credentialsId } = userData;
-
-      // Check if email already exists
-      const existingUserByEmail = await this.findByEmail(email);
-      if (existingUserByEmail) {
-        const error = new Error('User with this email already exists');
-        error.code = '23505';
-        throw error;
-      }
-
-      // Check if a user with this credentialsId already exists
-      const existingUserByCredentialsId = await this.findByCredentialsId(credentialsId);
-      if (existingUserByCredentialsId) {
-        const error = new Error('User with this credentialsId already exists');
-        error.code = '23505';
-        throw error;
-      }
-
-      const userQuery = `
-        INSERT INTO users (email, name, surname, role, credentials_id, registration_date)
-        VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)
-        RETURNING id, email, name, surname, role, credentials_id, registration_date as created_at
-      `;
-      const userValues = [
-        email,
-        firstName,
-        lastName,
-        role || 'developer', // Use 'developer' as default to match schema
-        credentialsId
-      ];
-      const { rows } = await db.query(userQuery, userValues);
-      return rows[0];
-    } catch (error) {
-      console.error('Error creating user profile:', error);
-      throw error;
-    }
-  },
-
-  /**
    * Retrieves a user by their email address.
    * @param {string} email - The email address of the user.
    * @returns {Promise<Object|null>} The user object if found, otherwise null.
@@ -145,7 +100,7 @@ const UserModel = {
   async findByEmail(email) {
     try {
       const query = `
-        SELECT id, email, name, surname, rank as role, credentials_id, registration_date
+        SELECT id, email, name, surname, role, credentials_id, registration_date
         FROM users
         WHERE email = $1
       `;
@@ -165,7 +120,7 @@ const UserModel = {
   async findByCredentialsId(credentialsId) {
     try {
       const query = `
-        SELECT id, email, name, surname, rank as role, credentials_id, registration_date
+        SELECT id, email, name, surname, role, credentials_id, registration_date
         FROM users
         WHERE credentials_id = $1
       `;
@@ -244,7 +199,7 @@ const UserModel = {
           UPDATE users
           SET ${updates.join(', ')}
           WHERE id = $${paramIndex}
-          RETURNING id, email, name, surname, rank as role, registration_date as created_at
+          RETURNING id, email, name, surname, role, registration_date as created_at
         `;
 
         const result = await client.query(query, values);
@@ -376,7 +331,7 @@ const UserModel = {
   async getUserByCredentialId(credentialsId) {
     try {
       const query = `
-        SELECT u.id, u.email, u.name as firstName, u.surname as lastName, u.rank as role, u.credentials_id, u.registration_date as created_at
+        SELECT u.id, u.email, u.name as firstName, u.surname as lastName, u.role, u.credentials_id, u.registration_date as created_at
         FROM users u
         WHERE u.credentials_id = $1
       `;
@@ -397,10 +352,28 @@ const UserModel = {
     try {
       const { email, firstName, lastName, role, credentialsId } = userData;
       
+      // Check if user with this email already exists
+      const existingUserByEmail = await this.findByEmail(email);
+      if (existingUserByEmail) {
+        const error = new Error('User with this email already exists');
+        error.code = 'DUPLICATE_EMAIL';
+        error.statusCode = 409;
+        throw error;
+      }
+      
+      // Check if user with this credentialsId already exists
+      const existingUserByCredentialsId = await this.findByCredentialsId(credentialsId);
+      if (existingUserByCredentialsId) {
+        const error = new Error('User with this credentialsId already exists');
+        error.code = 'DUPLICATE_CREDENTIALS';
+        error.statusCode = 409;
+        throw error;
+      }
+      
       const query = `
-        INSERT INTO users (email, name, surname, rank, credentials_id, registration_date)
+        INSERT INTO users (email, name, surname, role, credentials_id, registration_date)
         VALUES ($1, $2, $3, $4, $5, NOW())
-        RETURNING id, email, name as firstName, surname as lastName, rank as role, credentials_id, registration_date as created_at
+        RETURNING id, email, name as firstName, surname as lastName, role, credentials_id, registration_date as created_at
       `;
       
       const { rows } = await db.query(query, [email, firstName, lastName, role || 'developer', credentialsId]);
@@ -419,6 +392,51 @@ const UserModel = {
    */
   async validatePassword(password, hashedPassword) {
     return bcrypt.compare(password, hashedPassword);
+  },
+
+  /**
+   * Updates user rank
+   * @param {number} userId - User ID
+   * @param {number} newRank - New rank value
+   * @returns {Promise<Object>} Updated user
+   */
+  async updateUserRank(userId, newRank) {
+    try {
+      const query = `
+        UPDATE users
+        SET rank = $1
+        WHERE id = $2
+        RETURNING id, email, name, surname, role, rank, registration_date
+      `;
+      
+      const { rows } = await db.query(query, [newRank, userId]);
+      return rows[0];
+    } catch (error) {
+      console.error(`Error updating rank for user ${userId}:`, error);
+      throw error;
+    }
+  },
+
+  /**
+   * Get leaderboard - users ordered by rank
+   * @param {number} limit - Maximum number of users to return (default: 10)
+   * @returns {Promise<Array>} List of top users by rank
+   */
+  async getLeaderboard(limit = 10) {
+    try {
+      const query = `
+        SELECT id, name, surname, email, role, rank, registration_date
+        FROM users
+        ORDER BY rank DESC, registration_date ASC
+        LIMIT $1
+      `;
+      
+      const { rows } = await db.query(query, [limit]);
+      return rows;
+    } catch (error) {
+      console.error('Error getting leaderboard:', error);
+      throw error;
+    }
   }
 };
 

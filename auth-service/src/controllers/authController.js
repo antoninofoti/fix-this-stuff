@@ -34,7 +34,10 @@ const register = async (req, res) => {
     // Step 1: Check if credentials (username/email) already exist in auth-service
     const existingCredential = await credentialModel.getCredentialByUsername(email);
     if (existingCredential) {
-      return res.status(409).json({ message: 'Email already registered' });
+      return res.status(409).json({ 
+        message: 'Email already registered',
+        code: 'DUPLICATE_EMAIL'
+      });
     }
 
     // Step 2: Create credentials in auth-service
@@ -51,7 +54,8 @@ const register = async (req, res) => {
         credentialsId: newCredential.id // Pass the ID from the newly created credential
       });
 
-      res.status(201).json({
+      return res.status(201).json({
+        success: true,
         message: 'User registered successfully',
         user: userResponse.data.user, // Return user data from user-service
         credentialId: newCredential.id
@@ -60,11 +64,40 @@ const register = async (req, res) => {
     } catch (userServiceError) {
       // If user creation in user-service fails, we might need to roll back
       // the credential creation in auth-service or mark it as inactive.
-      // For now, log the error and return a generic server error.
       console.error('Error creating user profile in user-service:', userServiceError.response ? userServiceError.response.data : userServiceError.message);
+      
       // Attempt to delete the credential if user profile creation failed
-      await credentialModel.deleteCredentialById(newCredential.id);
-      return res.status(500).json({ message: 'Error during user profile creation. Registration rolled back.' });
+      try {
+        await credentialModel.deleteCredentialById(newCredential.id);
+      } catch (deleteError) {
+        console.error('Error rolling back credential:', deleteError);
+      }
+      
+      // Handle specific error codes from user-service
+      if (userServiceError.response) {
+        const { status, data } = userServiceError.response;
+        
+        if (status === 409) {
+          // Conflict - user already exists
+          return res.status(409).json({ 
+            message: data.message || 'User already exists',
+            code: data.code || 'DUPLICATE_USER'
+          });
+        }
+        
+        if (status === 400) {
+          // Bad request
+          return res.status(400).json({ 
+            message: data.message || 'Invalid user data',
+            code: data.code || 'INVALID_DATA'
+          });
+        }
+      }
+      
+      return res.status(500).json({ 
+        message: 'Error during user profile creation. Registration rolled back.',
+        error: process.env.NODE_ENV === 'development' ? userServiceError.message : undefined
+      });
     }
 
   } catch (error) {
@@ -89,12 +122,12 @@ const login = async (req, res) => {
     // Find the credential and verify password
     const credential = await credentialModel.getCredentialByUsername(email);
     if (!credential) {
-      return res.status(401).json({ message: 'Invalid credentials' });
+      return res.status(401).json({ message: 'User not found or invalid credentials' });
     }
 
     const isMatch = await bcrypt.compare(password, credential.password);
     if (!isMatch) {
-      return res.status(401).json({ message: 'Invalid credentials' });
+      return res.status(401).json({ message: 'Invalid email or password' });
     }
 
     // Step 2: Get user data from user-service using credentialId
@@ -124,10 +157,6 @@ const login = async (req, res) => {
       role: userRole,
       iat: Math.floor(Date.now() / 1000) // Issued at time
     };
-    
-    // Debug JWT secret
-    console.log("JWT Secret from environment:", process.env.JWT_SECRET);
-    console.log("Using JWT key:", process.env.JWT_SECRET.substring(0, Math.min(10, process.env.JWT_SECRET.length)) + "...");
     
     const token = jwt.sign(
       tokenPayload,

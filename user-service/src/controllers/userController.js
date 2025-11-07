@@ -78,7 +78,34 @@ const createUserInternal = async (req, res) => {
     });
   } catch (error) {
     console.error('Error in createUserInternal:', error);
-    res.status(500).json({ message: 'Server error' });
+    
+    // Handle specific error types
+    if (error.code === 'DUPLICATE_EMAIL') {
+      return res.status(409).json({ 
+        message: 'User with this email already exists',
+        code: 'DUPLICATE_EMAIL'
+      });
+    }
+    
+    if (error.code === 'DUPLICATE_CREDENTIALS') {
+      return res.status(409).json({ 
+        message: 'User with these credentials already exists',
+        code: 'DUPLICATE_CREDENTIALS'
+      });
+    }
+    
+    // Handle PostgreSQL unique constraint violations
+    if (error.code === '23505') {
+      return res.status(409).json({ 
+        message: 'User already exists',
+        code: 'DUPLICATE_USER'
+      });
+    }
+    
+    res.status(500).json({ 
+      message: 'Server error during user creation',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 };
 
@@ -91,8 +118,7 @@ const getUserById = async (req, res) => {
     
     // Admin can vedere tutti, developer/moderator solo il proprio profilo
     const allowedRoles = ['developer', 'moderator'];
-    // Debug: log valori
-    // console.log('userId param:', userId, 'req.user:', req.user);
+    
     if (req.user.role === 'admin') {
       // admin: access granted
     } else if (
@@ -199,55 +225,6 @@ const deleteUser = async (req, res) => {
 };
 
 /**
- * Internal endpoint to create a user, called by auth-service
- */
-const internalCreateUser = async (req, res) => {
-  try {
-    const { email, firstName, lastName, role, credentialsId } = req.body;
-
-    // Basic validation
-    if (!email || !firstName || !lastName || !credentialsId) {
-      return res.status(400).json({ message: 'Missing required fields for internal user creation' });
-    }
-
-    // Check if user already exists by email or credentialsId
-    const existingByEmail = await userModel.findByEmail(email);
-    if (existingByEmail) {
-      return res.status(409).json({ message: 'User with this email already exists' });
-    }
-
-    // In a real scenario, you might want to check if a user with credentialsId already exists
-    // if credentialsId is not the primary key or unique.
-    // For now, we assume credentialsId will be unique or handled by DB constraints.
-
-    const newUser = await userModel.create({
-      email,
-      firstName,
-      lastName,
-      role: role || 'user',
-      credentialsId
-    });
-
-    // We don't typically return the full user object on internal calls,
-    // but for confirmation, we can return the ID or a success message.
-    res.status(201).json({
-      message: 'User profile created successfully via internal call',
-      userId: newUser.id,
-      user: newUser // Returning the user object for now, can be trimmed later
-    });
-
-  } catch (error) {
-    console.error('Error in internalCreateUser:', error);
-    // If the error is due to a unique constraint violation (e.g., email already exists)
-    // which might not be caught by the above check if there's a race condition.
-    if (error.code === '23505') { // PostgreSQL unique violation error code
-        return res.status(409).json({ message: 'User creation failed due to a conflict (e.g., email or credentialsId already exists).' });
-    }
-    res.status(500).json({ message: 'Server error during internal user creation' });
-  }
-};
-
-/**
  * Get users by specific role. Needs x-user and x-role headers.
  */
 const getUsersByRole = async (req, res) => {
@@ -350,6 +327,110 @@ const internalGetUserById = async (req, res) => {
   }
 };
 
+/**
+ * Internal endpoint to update user rank based on ticket rating
+ */
+const updateUserRank = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { rating } = req.body;
+    
+    // Validate rating
+    if (!rating || rating < 1 || rating > 5) {
+      return res.status(400).json({ message: 'Rating must be between 1 and 5' });
+    }
+    
+    const user = await userModel.getUserById(userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    // Update user rank - increment by rating value
+    const currentRank = user.rank || 0;
+    const newRank = currentRank + rating;
+    
+    await userModel.updateUserRank(userId, newRank);
+    
+    res.status(200).json({ 
+      message: 'User rank updated successfully',
+      userId,
+      previousRank: currentRank,
+      newRank,
+      ratingReceived: rating
+    });
+  } catch (error) {
+    console.error('Error in updateUserRank:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+/**
+ * Internal endpoint to update user score based on ticket resolution
+ */
+const updateUserScore = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { points } = req.body;
+    
+    // Validate points
+    if (points === undefined || points === null) {
+      return res.status(400).json({ message: 'Points value is required' });
+    }
+    
+    const user = await userModel.getUserById(userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    // Update user score - increment by points
+    const currentScore = user.rank || 0; // Using 'rank' field as score
+    const newScore = currentScore + points;
+    
+    await userModel.updateUserRank(userId, newScore);
+    
+    res.status(200).json({ 
+      message: 'User score updated successfully',
+      userId,
+      previousScore: currentScore,
+      newScore,
+      pointsAwarded: points
+    });
+  } catch (error) {
+    console.error('Error in updateUserScore:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+/**
+ * Get leaderboard of users by rank
+ */
+const getLeaderboard = async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 10;
+    
+    // Validate limit
+    if (limit < 1 || limit > 100) {
+      return res.status(400).json({ message: 'Limit must be between 1 and 100' });
+    }
+    
+    const leaderboard = await userModel.getLeaderboard(limit);
+    
+    // Add position to each user
+    const leaderboardWithPosition = leaderboard.map((user, index) => ({
+      position: index + 1,
+      ...user
+    }));
+    
+    res.status(200).json({ 
+      leaderboard: leaderboardWithPosition,
+      count: leaderboard.length
+    });
+  } catch (error) {
+    console.error('Error in getLeaderboard:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
 module.exports = {
   getAllUsers,
   getUserById,
@@ -357,9 +438,12 @@ module.exports = {
   createUserInternal,
   updateUser,
   deleteUser,
-  internalCreateUser, // Add new controller
+  createUserInternal, // Internal endpoint for user creation
   internalGetUserById, // Add internal getUserById
   getUsersByRole,
   updateUserRole,
-  getPrivilegedUsers
+  getPrivilegedUsers,
+  updateUserRank,
+  updateUserScore,
+  getLeaderboard
 };

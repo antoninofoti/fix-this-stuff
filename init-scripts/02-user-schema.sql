@@ -6,7 +6,7 @@ CREATE TABLE users (
     email VARCHAR(100) NOT NULL UNIQUE,
     rank INTEGER DEFAULT 0,
     registration_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    credentials_id INTEGER NOT NULL,
+    credentials_id INTEGER NOT NULL UNIQUE,
     role VARCHAR(20) NOT NULL DEFAULT 'developer' CHECK (role IN ('developer', 'moderator', 'admin'))
 );
 

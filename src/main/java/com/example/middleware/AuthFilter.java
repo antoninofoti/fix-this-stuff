@@ -31,9 +31,34 @@ public class AuthFilter implements Filter {
         HttpServletResponse httpResponse = (HttpServletResponse) response;
         
         String requestURI = httpRequest.getRequestURI();
+        String method = httpRequest.getMethod();
+        
+        // Skip authentication for OPTIONS requests (CORS preflight)
+        if ("OPTIONS".equals(method)) {
+            chain.doFilter(request, response);
+            return;
+        }
         
         // Skip authentication for auth service endpoints
         if (requestURI.startsWith("/api/auth/")) {
+            chain.doFilter(request, response);
+            return;
+        }
+        
+        // Skip authentication for leaderboard endpoint (public)
+        if (requestURI.equals("/api/users/leaderboard") && "GET".equals(method)) {
+            chain.doFilter(request, response);
+            return;
+        }
+        
+        // Skip authentication for GET tickets (guest access allowed)
+        if (requestURI.startsWith("/api/tickets") && "GET".equals(method)) {
+            chain.doFilter(request, response);
+            return;
+        }
+        
+        // Skip authentication for GET comments (guest access allowed)
+        if (requestURI.startsWith("/api/comments") && "GET".equals(method)) {
             chain.doFilter(request, response);
             return;
         }

@@ -124,6 +124,50 @@ class ServiceRegistry {
       return null;
     }
   }
+
+  /**
+   * Update user rank based on ticket rating (optional feedback system)
+   * @param {number} userId - User ID to update rank for
+   * @param {number} rating - Rating value (1-5)
+   * @returns {Promise<boolean>} True if update was successful
+   */
+  static async updateUserRank(userId, rating) {
+    try {
+      const userServiceUrl = process.env.USER_SERVICE_URL || 'http://user-service:3002';
+      const response = await axios.patch(
+        `${userServiceUrl}/api/users/internal/${userId}/rank`,
+        { rating },
+        { timeout: 5000 }
+      );
+      
+      return response.status === 200;
+    } catch (error) {
+      console.error(`Error updating rank for user ${userId}:`, error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Update user score based on ticket resolution
+   * @param {number} userId - User ID to update score for
+   * @param {number} points - Points to add to user's score
+   * @returns {Promise<boolean>} True if update was successful
+   */
+  static async updateUserScore(userId, points) {
+    try {
+      const userServiceUrl = process.env.USER_SERVICE_URL || 'http://user-service:3002';
+      const response = await axios.patch(
+        `${userServiceUrl}/api/users/internal/${userId}/score`,
+        { points },
+        { timeout: 5000 }
+      );
+      
+      return response.status === 200;
+    } catch (error) {
+      console.error(`Error updating score for user ${userId}:`, error.message);
+      throw error;
+    }
+  }
 }
 
 module.exports = ServiceRegistry;

@@ -46,9 +46,16 @@ const createTicket = async (req, res) => {
     // Convert category to system_id (no validation needed)
     const systemId = parseInt(category, 10);
 
-    // Get current date plus 7 days for default deadline
+    // Calculate deadline based on priority
+    // HIGH: 2 days, MEDIUM: 7 days, LOW: 14 days
     const deadline = new Date();
-    deadline.setDate(deadline.getDate() + 7);
+    const priorityDays = {
+      'high': 2,
+      'medium': 7,
+      'low': 14
+    };
+    const daysToAdd = priorityDays[priority.toLowerCase()] || 7;
+    deadline.setDate(deadline.getDate() + daysToAdd);
     
     const newTicket = await ticketModel.createTicket({
       title,
@@ -89,19 +96,28 @@ const getAllTickets = async (req, res) => {
     if (req.user) {
       const userId = req.user.id;
       const userRole = req.user.role;
-      // Admins and moderators can see all tickets
-      if (userRole === 'admin' || userRole === 'moderator') {
-        tickets = await ticketModel.getAllTickets();
-      } else {
-        // Regular users possono vedere solo i propri ticket
-        // Se vuoi implementare questa funzione, serve ticketModel.getTicketsByUserId(userId)
-        tickets = await ticketModel.getAllTickets({ authorId: userId });
-      }
+      
+      // All authenticated users can see all tickets
+      // (This is for the public ticket view, not personal dashboard)
+      tickets = await ticketModel.getAllTickets();
+      
+      // Get complete data for each ticket
+      const ticketsWithDetails = await Promise.all(tickets.map(async ticket => {
+        return await ServiceRegistry.getCompleteTicketData(ticket.id, ticketModel);
+      }));
+      
+      res.status(200).json({ tickets: ticketsWithDetails });
     } else {
       // Unauthenticated users can see all public tickets
-      tickets = await ticketModel.getAllTickets(); // Puoi filtrare qui se vuoi
+      tickets = await ticketModel.getAllTickets();
+      
+      // Get complete data for each ticket
+      const ticketsWithDetails = await Promise.all(tickets.map(async ticket => {
+        return await ServiceRegistry.getCompleteTicketData(ticket.id, ticketModel);
+      }));
+      
+      res.status(200).json({ tickets: ticketsWithDetails });
     }
-    res.status(200).json({ tickets });
   } catch (error) {
     console.error('Error in getAllTickets:', error);
     res.status(500).json({ message: 'Server error' });
@@ -241,21 +257,27 @@ const updateTicket = async (req, res) => {
       if (status) updates.status = status;
       if (assigned_to) updates.assigned_to = assigned_to;
       
-    } else if (ticket.created_by === userId) {
+    } else if (ticket.request_author_id === userId) {
       // Regular users can only update title, description, category, and priority of their own tickets
-      // And only if the ticket is not already being worked on
-      if (ticket.status !== 'open' && ticket.status !== 'pending') {
-        return res.status(403).json({
-          message: 'You cannot update this ticket as it is already being processed'
-        });
+      // They can also close their own tickets
+      const { title, description, category, priority, flag_status } = req.body;
+      
+      // Can update basic fields only if ticket is open
+      if (ticket.flag_status === 'open') {
+        if (title) updates.title = title;
+        if (description) updates.request = description;
+        if (category) updates.system_id = category;
+        if (priority) updates.priority = priority;
       }
       
-      const { title, description, category, priority } = req.body;
-      
-      if (title) updates.title = title;
-      if (description) updates.description = description;
-      if (category) updates.category = category;
-      if (priority) updates.priority = priority;
+      // Can close the ticket anytime (but not reopen)
+      if (flag_status === 'closed') {
+        updates.flag_status = 'closed';
+        updates.closed_by = userId;
+        updates.closed_date = new Date();
+        // When author closes, it's not solved
+        updates.solve_status = 'not_solved';
+      }
       
     } else {
       return res.status(403).json({
@@ -341,10 +363,48 @@ const updateTicketAdmin = async (req, res) => {
     }
     if (answer) updateFields.answer = answer;
     
-    // Track ticket closing
+    // Track ticket closing and calculate score
     if (flag_status === 'closed' && ticket.flag_status !== 'closed') {
       updateFields.closed_by = req.user.id;
       updateFields.closed_date = new Date();
+      
+      // Calculate and award points if ticket is solved
+      if (solve_status === 'solved') {
+        // Determine who should get the points
+        let developerId = ticket.assigned_developer_id;
+        
+        // If no developer is assigned but a moderator/admin is closing it as solved,
+        // assign the developer to the person closing it if they're not an admin/moderator
+        if (!developerId) {
+          const userRole = req.user.role;
+          if (userRole !== 'admin' && userRole !== 'moderator') {
+            // Assign to the user closing it (developer)
+            developerId = req.user.id;
+            updateFields.assigned_developer_id = developerId;
+            updateFields.assigned_by = req.user.id;
+            updateFields.assigned_date = new Date();
+          } else if (userRole === 'admin' || userRole === 'moderator') {
+            // Admin/Moderator closing it - assign to themselves if no one else is assigned
+            developerId = req.user.id;
+            updateFields.assigned_developer_id = developerId;
+            updateFields.assigned_by = req.user.id;
+            updateFields.assigned_date = new Date();
+          }
+        }
+        
+        // Award points to the developer
+        if (developerId) {
+          try {
+            const score = calculateTicketScore(ticket.priority, ticket.opening_date, ticket.deadline_date);
+            console.log(`Awarding ${score} points to developer ${developerId} for solving ticket ${ticketId}`);
+            
+            await ServiceRegistry.updateUserScore(developerId, score);
+          } catch (error) {
+            console.error('Error awarding score:', error);
+            // Don't fail the ticket update if score update fails
+          }
+        }
+      }
     }
     
     // Include audit information
@@ -370,6 +430,55 @@ const updateTicketAdmin = async (req, res) => {
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
+};
+
+/**
+ * Calculate score based on ticket priority and resolution time
+ * @param {string} priority - Ticket priority (high, medium, low)
+ * @param {Date} openingDate - When the ticket was opened
+ * @param {Date} deadline - Ticket deadline
+ * @returns {number} Calculated score
+ */
+const calculateTicketScore = (priority, openingDate, deadline) => {
+  // Base points by priority
+  const priorityPoints = {
+    'high': 100,
+    'medium': 50,
+    'low': 25
+  };
+  
+  const basePoints = priorityPoints[priority?.toLowerCase()] || 25;
+  
+  // Calculate days taken to resolve
+  const openDate = new Date(openingDate);
+  const deadlineDate = new Date(deadline);
+  const closedDate = new Date(); // Current time (when ticket is being closed)
+  
+  const totalDays = Math.ceil((deadlineDate - openDate) / (1000 * 60 * 60 * 24));
+  const daysTaken = Math.ceil((closedDate - openDate) / (1000 * 60 * 60 * 24));
+  
+  // Calculate bonus/penalty based on completion time
+  let timeMultiplier = 1.0;
+  
+  if (daysTaken <= totalDays * 0.5) {
+    // Completed in first half: 50% bonus
+    timeMultiplier = 1.5;
+  } else if (daysTaken <= totalDays) {
+    // Completed before deadline: no bonus/penalty
+    timeMultiplier = 1.0;
+  } else if (daysTaken <= totalDays * 1.5) {
+    // Up to 50% over deadline: 25% penalty
+    timeMultiplier = 0.75;
+  } else {
+    // More than 50% over deadline: 50% penalty
+    timeMultiplier = 0.5;
+  }
+  
+  const finalScore = Math.round(basePoints * timeMultiplier);
+  
+  console.log(`Score calculation: priority=${priority}, basePoints=${basePoints}, daysTaken=${daysTaken}, totalDays=${totalDays}, multiplier=${timeMultiplier}, finalScore=${finalScore}`);
+  
+  return finalScore;
 };
 
 /**
@@ -404,6 +513,104 @@ const deleteTicket = async (req, res) => {
   }
 };
 
+/**
+ * Rate a resolved ticket
+ * Only the ticket requester can rate their own ticket
+ */
+const rateTicket = async (req, res) => {
+  try {
+    const { ticketId } = req.params;
+    const { rating, comment } = req.body;
+    
+    // Validate rating
+    if (!rating || rating < 1 || rating > 5) {
+      return res.status(400).json({ 
+        message: 'Rating must be between 1 and 5' 
+      });
+    }
+    
+    // Check if ticket exists and get its data
+    const ticket = await ticketModel.getTicketById(ticketId);
+    if (!ticket) {
+      return res.status(404).json({ message: 'Ticket not found' });
+    }
+    
+    // Only the ticket requester can rate
+    const userId = req.user.id;
+    if (ticket.request_author_id !== userId) {
+      return res.status(403).json({
+        message: 'Only the ticket requester can rate this ticket'
+      });
+    }
+    
+    // Check if ticket is closed and solved
+    if (ticket.flag_status !== 'closed' || ticket.solve_status !== 'solved') {
+      return res.status(400).json({
+        message: 'You can only rate tickets that are closed and marked as solved'
+      });
+    }
+    
+    // Check if ticket is already rated
+    const existingRating = await ticketModel.getTicketRating(ticketId);
+    if (existingRating) {
+      return res.status(400).json({
+        message: 'This ticket has already been rated'
+      });
+    }
+    
+    // Create the rating
+    const newRating = await ticketModel.createTicketRating({
+      ticket_id: ticketId,
+      rating: parseInt(rating, 10),
+      comment: comment || null,
+      rated_by: userId
+    });
+    
+    // Update user rank if there's an assigned developer
+    if (ticket.assigned_developer_id) {
+      try {
+        // Call user-service to update rank
+        await ServiceRegistry.updateUserRank(ticket.assigned_developer_id, rating);
+        console.log(`Updated rank for user ${ticket.assigned_developer_id} with rating ${rating}`);
+      } catch (error) {
+        console.error('Error updating user rank:', error);
+        // Don't fail the request if rank update fails
+      }
+    }
+    
+    res.status(201).json({
+      message: 'Rating submitted successfully',
+      rating: newRating
+    });
+  } catch (error) {
+    console.error('Error in rateTicket:', error);
+    res.status(500).json({ 
+      message: error.message || 'Server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+/**
+ * Get rating for a ticket
+ */
+const getTicketRating = async (req, res) => {
+  try {
+    const { ticketId } = req.params;
+    
+    const rating = await ticketModel.getTicketRating(ticketId);
+    
+    if (!rating) {
+      return res.status(404).json({ message: 'No rating found for this ticket' });
+    }
+    
+    res.status(200).json({ rating });
+  } catch (error) {
+    console.error('Error in getTicketRating:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
 module.exports = {
   createTicket,
   getAllTickets,
@@ -411,5 +618,7 @@ module.exports = {
   getTicketById,
   updateTicket,
   updateTicketAdmin,
-  deleteTicket
+  deleteTicket,
+  rateTicket,
+  getTicketRating
 };
