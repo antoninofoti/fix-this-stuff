@@ -61,7 +61,7 @@ Handles authentication and credential management.
 - Password hashing with bcrypt
 
 **Database**: `authdb`
-- Table: `credentials` (id, username, password, created_at)
+- Table: `credentials` (id, username, password, registration_date, role)
 
 ### User Service (Port 3002)
 
@@ -74,7 +74,7 @@ Manages user profiles, roles, and permissions.
 - Authorization checks
 
 **Database**: `userdb`
-- Table: `users` (id, email, name, surname, role, credentials_id)
+- Table: `users` (id, name, surname, email, rank, registration_date, credentials_id, role)
 - Table: `user_skills` (user_id, skill)
 
 ### Ticket Service (Port 3003)
@@ -88,7 +88,7 @@ Manages support tickets and topics.
 - Topic categorization
 
 **Database**: `ticketdb`
-- Table: `ticket` (id, title, priority, status, request, answer, etc.)
+- Table: `ticket` (id, title, priority, opening_date, deadline_date, flag_status, solve_status. request, answer, request_author_id, assigned_developer_id, system_id)
 - Table: `topic` (id, name)
 - Table: `ticket_topic` (ticket_id, topic_id)
 - Table: `comment` (id, comment_text, author_id, ticket_id, creation_date)
