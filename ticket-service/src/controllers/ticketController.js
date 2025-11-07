@@ -611,6 +611,205 @@ const getTicketRating = async (req, res) => {
   }
 };
 
+/**
+ * Developer marks ticket as solved (awaiting approval)
+ * POST /tickets/:ticketId/mark-solved
+ */
+const markAsSolved = async (req, res) => {
+  try {
+    const { ticketId } = req.params;
+    const userId = req.user.id;
+    const userRole = req.user.role;
+    
+    const ticket = await ticketModel.getTicketById(ticketId);
+    
+    if (!ticket) {
+      return res.status(404).json({ message: 'Ticket not found' });
+    }
+    
+    // Only assigned developer can mark as solved
+    if (ticket.assigned_developer_id !== userId) {
+      return res.status(403).json({ 
+        message: 'Only the assigned developer can mark this ticket as solved' 
+      });
+    }
+    
+    // Ticket must be open
+    if (ticket.flag_status !== 'open') {
+      return res.status(400).json({ 
+        message: 'Cannot mark a closed ticket as solved' 
+      });
+    }
+    
+    // Mark as solved but keep open (awaiting approval)
+    const updates = {
+      solve_status: 'solved',
+      resolved_by_id: userId,
+      resolved_at: new Date()
+    };
+    
+    const updatedTicket = await ticketModel.updateTicket(ticketId, updates);
+    
+    res.status(200).json({
+      message: 'Ticket marked as solved. Awaiting moderator/admin approval.',
+      ticket: updatedTicket
+    });
+  } catch (error) {
+    console.error('Error in markAsSolved:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+/**
+ * Moderator/Admin approves solution and closes ticket (assigns points)
+ * POST /tickets/:ticketId/approve-and-close
+ */
+const approveAndClose = async (req, res) => {
+  try {
+    const { ticketId } = req.params;
+    const userId = req.user.id;
+    const userRole = req.user.role;
+    const { score } = req.body; // Points to award
+    
+    // Only moderators and admins can approve
+    if (userRole !== 'admin' && userRole !== 'moderator') {
+      return res.status(403).json({ 
+        message: 'Only moderators and admins can approve solutions' 
+      });
+    }
+    
+    const ticket = await ticketModel.getTicketById(ticketId);
+    
+    if (!ticket) {
+      return res.status(404).json({ message: 'Ticket not found' });
+    }
+    
+    if (ticket.solve_status !== 'solved') {
+      return res.status(400).json({ 
+        message: 'Ticket must be marked as solved before approval' 
+      });
+    }
+    
+    if (!ticket.resolved_by_id) {
+      return res.status(400).json({ 
+        message: 'No developer assigned to this solution' 
+      });
+    }
+    
+    // Close ticket and assign points to resolver
+    const updates = {
+      flag_status: 'closed',
+      closed_by: userId,
+      closed_date: new Date(),
+      solve_status: 'solved',
+      score: score || ticket.score || 10 // Use provided score or default
+    };
+    
+    const updatedTicket = await ticketModel.updateTicket(ticketId, updates);
+    
+    // Award points to the developer who solved it
+    await ticketModel.awardPoints(ticket.resolved_by_id, updates.score);
+    
+    res.status(200).json({
+      message: 'Solution approved and ticket closed. Points awarded.',
+      ticket: updatedTicket,
+      pointsAwarded: updates.score,
+      awardedTo: ticket.resolved_by_id
+    });
+  } catch (error) {
+    console.error('Error in approveAndClose:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+/**
+ * Moderator/Admin rejects solution and reopens
+ * POST /tickets/:ticketId/reject-solution
+ */
+const rejectSolution = async (req, res) => {
+  try {
+    const { ticketId } = req.params;
+    const userRole = req.user.role;
+    const { reason } = req.body;
+    
+    // Only moderators and admins can reject
+    if (userRole !== 'admin' && userRole !== 'moderator') {
+      return res.status(403).json({ 
+        message: 'Only moderators and admins can reject solutions' 
+      });
+    }
+    
+    const ticket = await ticketModel.getTicketById(ticketId);
+    
+    if (!ticket) {
+      return res.status(404).json({ message: 'Ticket not found' });
+    }
+    
+    // Reset to not solved, keep open
+    const updates = {
+      solve_status: 'not_solved',
+      resolved_by_id: null,
+      resolved_at: null,
+      rejection_reason: reason || null
+    };
+    
+    const updatedTicket = await ticketModel.updateTicket(ticketId, updates);
+    
+    res.status(200).json({
+      message: 'Solution rejected. Ticket reopened.',
+      ticket: updatedTicket
+    });
+  } catch (error) {
+    console.error('Error in rejectSolution:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+/**
+ * Moderator/Admin closes ticket without solution
+ * POST /tickets/:ticketId/close-unsolved
+ */
+const closeUnsolved = async (req, res) => {
+  try {
+    const { ticketId } = req.params;
+    const userId = req.user.id;
+    const userRole = req.user.role;
+    const { reason } = req.body;
+    
+    // Only moderators and admins can close
+    if (userRole !== 'admin' && userRole !== 'moderator') {
+      return res.status(403).json({ 
+        message: 'Only moderators and admins can close tickets' 
+      });
+    }
+    
+    const ticket = await ticketModel.getTicketById(ticketId);
+    
+    if (!ticket) {
+      return res.status(404).json({ message: 'Ticket not found' });
+    }
+    
+    // Close without solution (no points)
+    const updates = {
+      flag_status: 'closed',
+      solve_status: 'not_solved',
+      closed_by: userId,
+      closed_date: new Date(),
+      closure_reason: reason || null
+    };
+    
+    const updatedTicket = await ticketModel.updateTicket(ticketId, updates);
+    
+    res.status(200).json({
+      message: 'Ticket closed without solution. No points awarded.',
+      ticket: updatedTicket
+    });
+  } catch (error) {
+    console.error('Error in closeUnsolved:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
 module.exports = {
   createTicket,
   getAllTickets,
@@ -620,5 +819,9 @@ module.exports = {
   updateTicketAdmin,
   deleteTicket,
   rateTicket,
-  getTicketRating
+  getTicketRating,
+  markAsSolved,
+  approveAndClose,
+  rejectSolution,
+  closeUnsolved
 };

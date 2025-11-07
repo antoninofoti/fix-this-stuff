@@ -53,4 +53,24 @@ router.post('/:ticketId/rating', authenticateRequest, authorizeAuthenticated, [
 // Get rating for a ticket
 router.get('/:ticketId/rating', ticketController.getTicketRating);
 
+// NEW WORKFLOW ROUTES
+
+// Developer marks ticket as solved (awaiting approval)
+router.post('/:ticketId/mark-solved', authenticateRequest, authorizeAuthenticated, ticketController.markAsSolved);
+
+// Moderator/Admin approves solution and closes ticket (awards points)
+router.post('/:ticketId/approve-and-close', authenticateRequest, authorizeModerator, [
+  body('score').optional().isInt({ min: 1 }).withMessage('Score must be a positive integer')
+], ticketController.approveAndClose);
+
+// Moderator/Admin rejects solution and reopens
+router.post('/:ticketId/reject-solution', authenticateRequest, authorizeModerator, [
+  body('reason').optional().isString().withMessage('Reason must be a string')
+], ticketController.rejectSolution);
+
+// Moderator/Admin closes ticket without solution
+router.post('/:ticketId/close-unsolved', authenticateRequest, authorizeModerator, [
+  body('reason').optional().isString().withMessage('Reason must be a string')
+], ticketController.closeUnsolved);
+
 module.exports = router;

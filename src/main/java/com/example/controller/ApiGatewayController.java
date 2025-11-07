@@ -99,6 +99,24 @@ public class ApiGatewayController {
     }
 
     /**
+     * Forward ticket comments to comment-service (must be before /tickets/**)
+     */
+    @RequestMapping(value = "/tickets/*/comments/**", method = {RequestMethod.GET, RequestMethod.POST, RequestMethod.PUT, RequestMethod.DELETE, RequestMethod.OPTIONS})
+    public ResponseEntity<String> forwardTicketCommentsToCommentService(
+            HttpServletRequest request,
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @RequestHeader(value = "Content-Type", required = false) String contentType,
+            @RequestBody(required = false) String body) {
+        
+        // Handle OPTIONS requests for CORS preflight
+        if ("OPTIONS".equals(request.getMethod())) {
+            return ResponseEntity.ok().build();
+        }
+        
+        return forwardRequestSimple(request, "http://comment-api:5003/api", authorization, contentType, body);
+    }
+
+    /**
      * Forward requests to comment-service
      */
     @RequestMapping(value = "/comments/**", method = {RequestMethod.GET, RequestMethod.POST, RequestMethod.PUT, RequestMethod.DELETE, RequestMethod.OPTIONS})

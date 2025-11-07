@@ -335,20 +335,17 @@ const canResolveTicket = computed(() => {
   if (!isAuthenticated.value || !ticketData.value) return false
   const userRole = currentUser.value?.role
   
-  // Admin and moderator can resolve any ticket
-  if (userRole === 'admin' || userRole === 'moderator') {
-    return ticketData.value.flag_status === 'open'
-  }
-  
-  // Developer can resolve only if assigned to them
-  return ticketData.value.assigned_developer_id === currentUser.value?.id &&
+  // Only Admin and moderator can resolve tickets
+  return (userRole === 'admin' || userRole === 'moderator') &&
          ticketData.value.flag_status === 'open'
 })
 
 const canCloseTicket = computed(() => {
   if (!isAuthenticated.value || !ticketData.value) return false
-  // Author can close their own ticket if it's still open
-  return ticketData.value.request_author_id === currentUser.value?.id &&
+  const userRole = currentUser.value?.role
+  
+  // Only Admin and moderator can close tickets
+  return (userRole === 'admin' || userRole === 'moderator') &&
          ticketData.value.flag_status === 'open'
 })
 

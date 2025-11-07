@@ -456,6 +456,28 @@ const TicketModel = {
       console.error(`Error retrieving rating for ticket ${ticketId}:`, error);
       throw error;
     }
+  },
+
+  /**
+   * Awards points to a user (updates rank in userdb)
+   * @param {number} userId - User ID
+   * @param {number} points - Points to award
+   * @returns {Promise<void>}
+   */
+  async awardPoints(userId, points) {
+    try {
+      const query = `
+        UPDATE userdb.users
+        SET rank = COALESCE(rank, 0) + $1
+        WHERE id = $2
+      `;
+      
+      await db.query(query, [points, userId]);
+      console.log(`Awarded ${points} points to user ${userId}`);
+    } catch (error) {
+      console.error(`Error awarding points to user ${userId}:`, error);
+      throw error;
+    }
   }
 };
 

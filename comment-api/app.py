@@ -1,5 +1,5 @@
 # comment-api/app.py
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, Blueprint
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 import os
@@ -133,8 +133,11 @@ def publish_event(event_type, data):
         print(f"[!] Failed to publish {event_type} event: {e}", flush=True)
 
 
+# Create Blueprint with /api prefix
+api_bp = Blueprint('api', __name__, url_prefix='/api')
+
 # Routes
-@app.route('/tickets/<int:ticket_id>/comments', methods=['GET'])
+@api_bp.route('/tickets/<int:ticket_id>/comments', methods=['GET'])
 @optional_token
 def get_comments(ticket_id):
     comments = Comment.query.filter_by(ticket_id=ticket_id).order_by(Comment.creation_date).all()
@@ -149,7 +152,7 @@ def get_comments(ticket_id):
         for c in comments
     ])
 
-@app.route('/comments', methods=['POST'])
+@api_bp.route('/comments', methods=['POST'])
 @token_required
 def post_comment():
     data = request.get_json()
@@ -163,7 +166,7 @@ def post_comment():
     publish_event("created", comment_data)
     return jsonify({"message": "Comment submitted successfully to RabbitMQ"}), 201
 
-@app.route('/comments/<int:comment_id>', methods=['PUT'])
+@api_bp.route('/comments/<int:comment_id>', methods=['PUT'])
 @token_required
 def update_comment(comment_id):
     data = request.get_json()
@@ -181,28 +184,20 @@ def update_comment(comment_id):
     }
     
     publish_event("updated", event_data)
-
     return jsonify({"message": "Comment update request successfully submitted to rabbitMQ"})
 
-
-@app.route('/comments/<int:comment_id>', methods=['DELETE'])
+@api_bp.route('/comments/<int:comment_id>', methods=['DELETE'])
 @token_required
 def delete_comment(comment_id):
-    #comment = Comment.query.get(comment_id)
-    #if not comment:
-    #    return jsonify({"message": "Comment not found"}), 404
-
-    #db.session.delete(comment)
-    #db.session.commit()
-
     event_data = {"id": comment_id}
     publish_event("deleted", event_data)
-
     return jsonify({"message": "Comment delete request successfully submitted to rabbitMQ"})
+
+# Register blueprint
+app.register_blueprint(api_bp)
 
 @app.route('/health', methods=['GET'])
 def health():
-    #return "OK", 200
     return jsonify({
         "status": "OK",
         "service": "comment-api",
