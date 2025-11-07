@@ -1,49 +1,26 @@
-<template><template>
-
-  <div class="leaderboard-view">  <div class="leaderboard-container">
-
-    <LeaderboardTable />    <div class="leaderboard-header">
-
-  </div>      <h1>🏆 User Leaderboard</h1>
-
-</template>      <p class="subtitle">Top contributors in our community</p>
-
+<template>
+  <div class="leaderboard-container">
+    <div class="leaderboard-header">
+      <h1>🏆 User Leaderboard</h1>
+      <p class="subtitle">Top contributors in our community</p>
     </div>
 
-<script setup>
-
-import LeaderboardTable from '../components/LeaderboardTable.vue'    <div v-if="loading" class="loading">
-
-</script>      <div class="spinner"></div>
-
+    <div v-if="loading" class="loading">
+      <div class="spinner"></div>
       <p>Loading leaderboard...</p>
+    </div>
 
-<style scoped>    </div>
+    <div v-else-if="error" class="error-message">
+      <p>{{ error }}</p>
+      <button @click="loadLeaderboard" class="retry-button">Retry</button>
+    </div>
 
-.leaderboard-view {
-
-  padding: 2rem;    <div v-else-if="error" class="error-message">
-
-  max-width: 1400px;      <p>{{ error }}</p>
-
-  margin: 0 auto;      <button @click="loadLeaderboard" class="retry-button">Retry</button>
-
-}    </div>
-
-
-
-@media (max-width: 768px) {    <div v-else class="leaderboard-content">
-
-  .leaderboard-view {      <div class="leaderboard-info">
-
-    padding: 1rem;        <p>Total users in leaderboard: <strong>{{ leaderboard.length }}</strong></p>
-
-  }        <div class="filter-controls">
-
-}          <label for="limit-select">Show:</label>
-
-</style>          <select id="limit-select" v-model="selectedLimit" @change="loadLeaderboard">
-
+    <div v-else class="leaderboard-content">
+      <div class="leaderboard-info">
+        <p>Total users in leaderboard: <strong>{{ leaderboard.length }}</strong></p>
+        <div class="filter-controls">
+          <label for="limit-select">Show:</label>
+          <select id="limit-select" v-model="selectedLimit" @change="loadLeaderboard">
             <option :value="10">Top 10</option>
             <option :value="25">Top 25</option>
             <option :value="50">Top 50</option>
