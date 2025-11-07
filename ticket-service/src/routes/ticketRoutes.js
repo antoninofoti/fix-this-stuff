@@ -82,14 +82,6 @@ router.get('/developers/:developerId/stats', ticketController.getDeveloperStats)
 // Developer marks ticket as solved (awaiting approval)
 router.post('/:ticketId/mark-solved', authenticateRequest, authorizeAuthenticated, ticketController.markAsSolved);
 
-module.exports = router;
-
-
-// NEW WORKFLOW ROUTES
-
-// Developer marks ticket as solved (awaiting approval)
-router.post('/:ticketId/mark-solved', authenticateRequest, authorizeAuthenticated, ticketController.markAsSolved);
-
 // Moderator/Admin approves solution and closes ticket (awards points)
 router.post('/:ticketId/approve-and-close', authenticateRequest, authorizeModerator, [
   body('score').optional().isInt({ min: 1 }).withMessage('Score must be a positive integer')

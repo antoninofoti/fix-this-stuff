@@ -745,31 +745,6 @@ const calculateResolutionPoints = () => {
 }
 
 const goBack = () => {
-  if (selectedRating.value === 0) return
-  
-  submittingRating.value = true
-  try {
-    await ticketStore.rateTicket(props.ticketId, {
-      rating: selectedRating.value,
-      comment: ratingComment.value || null
-    })
-    
-    // Refetch to get the rating
-    const rating = await ticketStore.fetchTicketRating(props.ticketId)
-    ticketRating.value = rating
-    
-    // Reset form
-    selectedRating.value = 0
-    ratingComment.value = ''
-  } catch (error) {
-    console.error('Error submitting rating:', error)
-    alert(error.response?.data?.message || 'Failed to submit rating')
-  } finally {
-    submittingRating.value = false
-  }
-}
-
-const goBack = () => {
   router.back()
 }
 </script>

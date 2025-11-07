@@ -321,6 +321,12 @@ public class ApiGatewayController {
             
             // Create headers
             HttpHeaders headers = new HttpHeaders();
+            
+            // If authorization parameter is null, try to get it from the request header
+            if (authorization == null) {
+                authorization = request.getHeader("Authorization");
+            }
+            
             if (authorization != null) {
                 headers.set("Authorization", authorization);
             }

@@ -885,25 +885,6 @@ const getDeveloperStats = async (req, res) => {
   }
 };
 
-module.exports = {
-  createTicket,
-  getAllTickets,
-  getAllTicketsAdmin,
-  getTicketById,
-  updateTicket,
-  updateTicketAdmin,
-  deleteTicket,
-  rateTicket,
-  getTicketRating,
-  markAsSolved,
-  requestResolution,
-  approveResolution,
-  rejectResolution,
-  getPendingApprovalTickets,
-  getLeaderboard,
-  getDeveloperStats
-};
-
 /**
  * Moderator/Admin approves solution and closes ticket (assigns points)
  * POST /tickets/:ticketId/approve-and-close
@@ -1065,6 +1046,12 @@ module.exports = {
   rateTicket,
   getTicketRating,
   markAsSolved,
+  requestResolution,
+  approveResolution,
+  rejectResolution,
+  getPendingApprovalTickets,
+  getLeaderboard,
+  getDeveloperStats,
   approveAndClose,
   rejectSolution,
   closeUnsolved

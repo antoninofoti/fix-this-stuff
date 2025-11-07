@@ -9,7 +9,7 @@ import json
 import requests
 from functools import wraps
 
-AUTH_SERVICE_URL = os.getenv("AUTH_SERVICE_URL", "http://auth-service:3001/api/auth")
+AUTH_SERVICE_URL = os.getenv("AUTH_SERVICE_URL", "http://auth-service:3001/auth")
 
 def token_required(f):
     @wraps(f)
@@ -21,23 +21,31 @@ def token_required(f):
                 token = auth_header.split(" ")[1]
         
         if not token:
+            print("[!] Token is missing from request", flush=True)
             return jsonify({"message": "Token is missing"}), 401
         
         try:
+            print(f"[*] Verifying token with auth-service: {AUTH_SERVICE_URL}/verify-token", flush=True)
             resp = requests.get(
                 f"{AUTH_SERVICE_URL}/verify-token",
                 headers={"Authorization": f"Bearer {token}"}
             )
+            print(f"[*] Auth-service response status: {resp.status_code}", flush=True)
             if resp.status_code != 200:
+                print(f"[!] Auth-service returned non-200: {resp.text}", flush=True)
                 return jsonify({"message": "Invalid or expired token"}), 401
             
             data = resp.json()
+            print(f"[*] Auth-service response data: {data}", flush=True)
             if not data.get("valid"):
+                print(f"[!] Token validation failed", flush=True)
                 return jsonify({"message": "Invalid token"}), 401
             
             # Attach user info to request
             request.user = data["user"]  # {'id': 2, 'email': ..., 'role': ...}
+            print(f"[✓] Token verified successfully for user: {request.user}", flush=True)
         except Exception as e:
+            print(f"[!] Exception during token verification: {e}", flush=True)
             return jsonify({"message": f"Token verification failed: {e}"}), 500
 
         return f(*args, **kwargs)
