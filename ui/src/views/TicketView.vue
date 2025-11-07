@@ -97,6 +97,90 @@
       </div>
 
       <!-- Action Buttons for Developers/Admins -->
+      <!-- NEW: Request Resolution Approval (Developer) -->
+      <div v-if="canRequestResolution" class="action-card mt-3">
+        <div class="card-body">
+          <h4><i class="bi bi-send-check"></i> Request Resolution Approval</h4>
+          <p class="text-muted">Submit this ticket for moderator/admin approval. Points will be awarded upon approval.</p>
+          
+          <div class="resolve-info mb-3">
+            <div class="alert alert-info">
+              <i class="bi bi-trophy-fill"></i>
+              <strong>Potential points: {{ calculateResolutionPoints() }}</strong>
+              <br>
+              <small class="text-muted">
+                Base points ({{ ticketData.priority?.toUpperCase() }}: {{ getPriorityPoints(ticketData.priority) }})
+                + Rating bonus (up to {{ ticketData.rating ? ticketData.rating * 2 : 10 }} pts)
+              </small>
+            </div>
+          </div>
+
+          <button 
+            class="btn btn-primary"
+            @click="requestResolutionApproval"
+            :disabled="resolvingTicket"
+          >
+            <span v-if="resolvingTicket">
+              <span class="spinner-border spinner-border-sm me-2"></span>
+              Requesting...
+            </span>
+            <span v-else>
+              <i class="bi bi-send-check-fill"></i> Request Approval
+            </span>
+          </button>
+
+          <div v-if="resolveError" class="alert alert-danger mt-3">
+            <i class="bi bi-exclamation-circle"></i> {{ resolveError }}
+          </div>
+        </div>
+      </div>
+
+      <!-- NEW: Approve/Reject Resolution (Moderator/Admin) -->
+      <div v-if="canApproveResolution" class="action-card mt-3">
+        <div class="card-body">
+          <h4><i class="bi bi-check2-square"></i> Review Resolution</h4>
+          <p class="text-muted">This ticket is awaiting your approval.</p>
+          
+          <div class="resolution-info mb-3">
+            <div class="alert alert-warning">
+              <strong>Resolved by:</strong> {{ ticketData.resolved_by_name || `Developer #${ticketData.resolved_by}` }}
+              <br>
+              <strong>Points to award:</strong> {{ calculateResolutionPoints() }} pts
+              <br>
+              <small class="text-muted">Resolved at: {{ formatDate(ticketData.resolved_at) }}</small>
+            </div>
+          </div>
+
+          <div class="d-flex gap-2">
+            <button 
+              class="btn btn-success"
+              @click="approveTicketResolution"
+              :disabled="processingApproval"
+            >
+              <span v-if="processingApproval">
+                <span class="spinner-border spinner-border-sm me-2"></span>
+                Processing...
+              </span>
+              <span v-else>
+                <i class="bi bi-check-circle-fill"></i> Approve
+              </span>
+            </button>
+            <button 
+              class="btn btn-danger"
+              @click="showRejectModal = true"
+              :disabled="processingApproval"
+            >
+              <i class="bi bi-x-circle-fill"></i> Reject
+            </button>
+          </div>
+
+          <div v-if="approvalError" class="alert alert-danger mt-3">
+            <i class="bi bi-exclamation-circle"></i> {{ approvalError }}
+          </div>
+        </div>
+      </div>
+
+      <!-- OLD: Direct Resolution (keeping for backward compatibility) -->
       <div v-if="canResolveTicket" class="action-card mt-3">
         <div class="card-body">
           <h4><i class="bi bi-check-circle"></i> Resolve Ticket</h4>
@@ -250,6 +334,37 @@
       </div>
     </div>
 
+    <!-- Rejection Modal -->
+    <div v-if="showRejectModal" class="modal-overlay" @click.self="showRejectModal = false">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3><i class="bi bi-x-circle"></i> Reject Resolution</h3>
+          <button @click="showRejectModal = false" class="close-btn">
+            <i class="bi bi-x"></i>
+          </button>
+        </div>
+        <div class="modal-body">
+          <p>Provide a reason for rejecting this resolution:</p>
+          <textarea
+            v-model="rejectionReason"
+            placeholder="Explain why this resolution is not acceptable..."
+            rows="5"
+            class="form-control"
+          ></textarea>
+        </div>
+        <div class="modal-footer">
+          <button @click="showRejectModal = false" class="btn btn-secondary">Cancel</button>
+          <button
+            @click="rejectTicketResolution"
+            class="btn btn-danger"
+            :disabled="!rejectionReason.trim() || processingApproval"
+          >
+            {{ processingApproval ? 'Rejecting...' : 'Confirm Rejection' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
     <div v-else class="text-center my-5">
       <div class="spinner-border text-primary" role="status">
         <span class="visually-hidden">Loading...</span>
@@ -266,6 +381,7 @@ import { useAuthStore } from '../store/auth'
 import { useRouter } from 'vue-router'
 import CommentSection from '../components/CommentSection.vue'
 import EditTicketForm from '../components/EditTicketForm.vue'
+import { requestResolution, approveResolution, rejectResolution } from '../api/ticket.js'
 
 const ticketStore = useTicketStore()
 const authStore = useAuthStore()
@@ -283,6 +399,10 @@ const ticketRating = ref(null)
 const resolutionAnswer = ref('')
 const resolvingTicket = ref(false)
 const resolveError = ref(null)
+const processingApproval = ref(false)
+const approvalError = ref(null)
+const showRejectModal = ref(false)
+const rejectionReason = ref('')
 const closingTicket = ref(false)
 const closeError = ref(null)
 
@@ -329,6 +449,26 @@ const canRateTicket = computed(() => {
   return ticketData.value.request_author_id === currentUser.value?.id &&
          ticketData.value.flag_status === 'closed' &&
          ticketData.value.solve_status === 'solved'
+})
+
+const canRequestResolution = computed(() => {
+  if (!isAuthenticated.value || !ticketData.value) return false
+  const userRole = currentUser.value?.role?.toLowerCase()
+  
+  // Developers can request resolution approval for assigned open tickets
+  return userRole === 'developer' &&
+         ticketData.value.flag_status === 'open' &&
+         ticketData.value.solve_status === 'not_solved' &&
+         ticketData.value.assigned_developer_id === currentUser.value?.id
+})
+
+const canApproveResolution = computed(() => {
+  if (!isAuthenticated.value || !ticketData.value) return false
+  const userRole = currentUser.value?.role?.toLowerCase()
+  
+  // Moderators and admins can approve pending resolutions
+  return (userRole === 'moderator' || userRole === 'admin') &&
+         ticketData.value.solve_status === 'pending_approval'
 })
 
 const canResolveTicket = computed(() => {
@@ -504,6 +644,107 @@ const closeTicket = async () => {
 }
 
 const submitRating = async () => {
+  if (selectedRating.value === 0) return
+  
+  submittingRating.value = true
+  try {
+    await ticketStore.submitTicketRating(props.ticketId, selectedRating.value, ratingComment.value)
+    alert('Thank you for your rating!')
+    ticketRating.value = {
+      rating: selectedRating.value,
+      comment: ratingComment.value,
+      rated_at: new Date()
+    }
+  } catch (error) {
+    console.error('Error submitting rating:', error)
+    alert('Failed to submit rating. Please try again.')
+  } finally {
+    submittingRating.value = false
+  }
+}
+
+// NEW: Request resolution approval (Developer)
+const requestResolutionApproval = async () => {
+  if (!confirm('Submit this ticket for moderator/admin approval?')) {
+    return
+  }
+  
+  resolvingTicket.value = true
+  resolveError.value = null
+  
+  try {
+    await requestResolution(props.ticketId)
+    alert('Resolution submitted for approval! You will receive points once approved.')
+    await fetchTicket(props.ticketId)
+  } catch (error) {
+    console.error('Error requesting resolution approval:', error)
+    resolveError.value = error.response?.data?.error || 'Failed to request approval'
+  } finally {
+    resolvingTicket.value = false
+  }
+}
+
+// NEW: Approve resolution (Moderator/Admin)
+const approveTicketResolution = async () => {
+  if (!confirm('Approve this resolution? Points will be awarded to the developer.')) {
+    return
+  }
+  
+  processingApproval.value = true
+  approvalError.value = null
+  
+  try {
+    await approveResolution(props.ticketId)
+    alert('Resolution approved! Points have been awarded to the developer.')
+    await fetchTicket(props.ticketId)
+  } catch (error) {
+    console.error('Error approving resolution:', error)
+    approvalError.value = error.response?.data?.error || 'Failed to approve resolution'
+  } finally {
+    processingApproval.value = false
+  }
+}
+
+// NEW: Reject resolution (Moderator/Admin)
+const rejectTicketResolution = async () => {
+  if (!rejectionReason.value.trim()) {
+    return
+  }
+  
+  processingApproval.value = true
+  approvalError.value = null
+  
+  try {
+    await rejectResolution(props.ticketId, rejectionReason.value)
+    alert('Resolution rejected. Developer has been notified.')
+    showRejectModal.value = false
+    rejectionReason.value = ''
+    await fetchTicket(props.ticketId)
+  } catch (error) {
+    console.error('Error rejecting resolution:', error)
+    approvalError.value = error.response?.data?.error || 'Failed to reject resolution'
+  } finally {
+    processingApproval.value = false
+  }
+}
+
+// Calculate resolution points
+const calculateResolutionPoints = () => {
+  if (!ticketData.value) return 0
+  const priorityPoints = {
+    'high': 10,
+    'HIGH': 10,
+    'medium': 5,
+    'MEDIUM': 5,
+    'low': 2,
+    'LOW': 2
+  }
+  const basePoints = priorityPoints[ticketData.value.priority] || 5
+  const ratingBonus = ticketData.value.rating ? ticketData.value.rating * 2 : 0
+  return basePoints + ratingBonus
+}
+
+const goBack = () => {
   if (selectedRating.value === 0) return
   
   submittingRating.value = true

@@ -270,6 +270,225 @@ Authorization: Bearer <token>
 }
 ```
 
+## Ticket Resolution Workflow Endpoints
+
+### Developer: Request Resolution Approval
+Developer requests approval for a resolved ticket.
+
+```bash
+POST /api/tickets/:ticketId/request-resolution
+Authorization: Bearer <token> (developer)
+Content-Type: application/json
+```
+
+**Requirements:**
+- User must be a developer
+- Ticket must be assigned to the requesting developer
+- Ticket cannot already be pending approval or solved
+
+**Response:**
+```json
+{
+  "message": "Resolution submitted for approval",
+  "ticket": {
+    "id": 5,
+    "solve_status": "pending_approval",
+    "resolved_by": 4,
+    "resolved_at": "2025-11-07T14:30:00.000Z"
+  }
+}
+```
+
+### Moderator/Admin: Approve Resolution
+Approve a pending resolution and award points to the developer.
+
+```bash
+POST /api/tickets/:ticketId/approve-resolution
+Authorization: Bearer <token> (moderator or admin)
+Content-Type: application/json
+```
+
+**Requirements:**
+- User must be moderator or admin
+- Ticket must have `solve_status: "pending_approval"`
+
+**Response:**
+```json
+{
+  "message": "Resolution approved successfully",
+  "ticket": {
+    "id": 5,
+    "solve_status": "solved",
+    "approved_by": 2,
+    "approval_date": "2025-11-07T15:00:00.000Z"
+  },
+  "pointsAwarded": 15,
+  "developerStats": {
+    "developer_id": 4,
+    "total_points": 145,
+    "tickets_resolved": 12,
+    "average_rating": 4.25
+  }
+}
+```
+
+**Points Calculation:**
+- Base points: `high=10`, `medium=5`, `low=2`
+- Bonus: If ticket has rating, add `rating × 2` points
+- Example: High priority ticket (10) + rating 5 (10 bonus) = 20 points
+
+### Moderator/Admin: Reject Resolution
+Reject a pending resolution with a reason.
+
+```bash
+POST /api/tickets/:ticketId/reject-resolution
+Authorization: Bearer <token> (moderator or admin)
+Content-Type: application/json
+
+{
+  "reason": "Solution does not fully address the reported issue"
+}
+```
+
+**Requirements:**
+- User must be moderator or admin
+- Ticket must have `solve_status: "pending_approval"`
+- Reason is required
+
+**Response:**
+```json
+{
+  "message": "Resolution rejected",
+  "ticket": {
+    "id": 5,
+    "solve_status": "not_solved",
+    "rejection_reason": "Solution does not fully address the reported issue",
+    "resolved_by": null,
+    "resolved_at": null
+  }
+}
+```
+
+### Moderator/Admin: Get Pending Approvals
+Get all tickets awaiting resolution approval.
+
+```bash
+GET /api/tickets/admin/pending-approval
+Authorization: Bearer <token> (moderator or admin)
+```
+
+**Response:**
+```json
+{
+  "tickets": [
+    {
+      "id": 5,
+      "title": "Database connection issue",
+      "priority": "high",
+      "solve_status": "pending_approval",
+      "resolved_by": 4,
+      "resolved_at": "2025-11-07T14:30:00.000Z",
+      "developer_name": "Mario Rossi",
+      "author_name": "Luigi Verdi"
+    }
+  ]
+}
+```
+
+## Leaderboard Endpoints
+
+### Get Leaderboard
+Public endpoint showing top developers by points. Only developers appear in leaderboard.
+
+```bash
+GET /api/tickets/leaderboard/top?limit=50
+```
+
+**Query Parameters:**
+- `limit` (optional, default: 50): Number of top developers to return
+
+**Response:**
+```json
+{
+  "leaderboard": [
+    {
+      "rank": 1,
+      "developer_id": 42,
+      "name": "Mario Rossi",
+      "total_points": 145,
+      "tickets_resolved": 12,
+      "average_rating": 4.25,
+      "last_updated": "2025-11-07T10:30:00.000Z"
+    },
+    {
+      "rank": 2,
+      "developer_id": 38,
+      "name": "Laura Bianchi",
+      "total_points": 132,
+      "tickets_resolved": 15,
+      "average_rating": 3.87,
+      "last_updated": "2025-11-06T18:20:00.000Z"
+    }
+  ]
+}
+```
+
+**Notes:**
+- Leaderboard is public (no authentication required)
+- Only developers with `role='developer'` appear
+- Moderators and admins do NOT appear in leaderboard
+- Ordered by `total_points DESC`, then `tickets_resolved DESC`
+
+### Get Developer Statistics
+Get detailed statistics for a specific developer.
+
+```bash
+GET /api/tickets/developers/:developerId/stats
+```
+
+**Response:**
+```json
+{
+  "stats": {
+    "developer_id": 42,
+    "name": "Mario Rossi",
+    "email": "mario.rossi@example.com",
+    "rank": 3,
+    "total_points": 98,
+    "tickets_resolved": 8,
+    "average_rating": 4.50,
+    "last_updated": "2025-11-07T10:30:00.000Z",
+    "created_at": "2025-10-01T08:00:00.000Z"
+  }
+}
+```
+
+**Notes:**
+- Public endpoint (no authentication required)
+- Returns 404 if developer has no resolved tickets yet
+
+## Ticket States
+
+### flag_status (Ticket Open/Closed)
+- `open`: Ticket is open
+- `closed`: Ticket is closed
+
+### solve_status (Resolution Status)
+- `not_solved`: Not resolved yet
+- `pending_approval`: Developer submitted resolution, awaiting approval
+- `solved`: Resolved and approved by moderator/admin
+
+### Valid State Combinations
+
+| flag_status | solve_status | Description |
+|------------|--------------|-------------|
+| `open` | `not_solved` | Open ticket, not yet resolved |
+| `open` | `pending_approval` | Open ticket, resolution pending approval |
+| `open` | `solved` | Open ticket, approved resolution (rare) |
+| `closed` | `not_solved` | Closed without solution (duplicate, invalid) |
+| `closed` | `solved` | Closed with approved solution (ideal case) |
+| `closed` | `pending_approval` | Closed but resolution not yet approved (rare) |
+
 ## Error Responses
 
 All endpoints may return the following error responses:

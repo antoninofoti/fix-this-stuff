@@ -36,6 +36,10 @@
           <i :class="getStatusIcon(ticketData.flag_status)"></i>
           {{ ticketData.flag_status?.toUpperCase() || 'OPEN' }}
         </span>
+        <span v-if="ticketData.solve_status" :class="['solve-status-badge', getSolveStatusClass(ticketData.solve_status)]">
+          <i :class="getSolveStatusIcon(ticketData.solve_status)"></i>
+          {{ formatSolveStatus(ticketData.solve_status) }}
+        </span>
       </div>
     </div>
 
@@ -122,6 +126,33 @@ const formatDate = (dateString) => {
     month: 'short',
     year: 'numeric'
   })
+}
+
+const getSolveStatusClass = (status) => {
+  const classes = {
+    'not_solved': 'not-solved',
+    'pending_approval': 'pending',
+    'solved': 'solved'
+  }
+  return classes[status] || 'not-solved'
+}
+
+const getSolveStatusIcon = (status) => {
+  const icons = {
+    'not_solved': 'bi bi-hourglass',
+    'pending_approval': 'bi bi-clock-history',
+    'solved': 'bi bi-check-circle-fill'
+  }
+  return icons[status] || 'bi bi-hourglass'
+}
+
+const formatSolveStatus = (status) => {
+  const labels = {
+    'not_solved': 'Not Solved',
+    'pending_approval': 'Pending Approval',
+    'solved': 'Solved'
+  }
+  return labels[status] || status
 }
 </script>
 
@@ -250,6 +281,31 @@ const formatDate = (dateString) => {
   padding: 0.35rem 0.75rem;
   border-radius: 15px;
   color: #0d6efd;
+}
+
+.solve-status-badge {
+  padding: 0.35rem 0.75rem;
+  border-radius: 15px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.solve-status-badge.not-solved {
+  background: #ffc107;
+  color: #000;
+}
+
+.solve-status-badge.pending {
+  background: #17a2b8;
+  color: white;
+}
+
+.solve-status-badge.solved {
+  background: #28a745;
+  color: white;
 }
 
 .ticket-card-footer {

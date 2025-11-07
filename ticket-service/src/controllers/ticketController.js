@@ -627,37 +627,281 @@ const markAsSolved = async (req, res) => {
       return res.status(404).json({ message: 'Ticket not found' });
     }
     
-    // Only assigned developer can mark as solved
-    if (ticket.assigned_developer_id !== userId) {
-      return res.status(403).json({ 
-        message: 'Only the assigned developer can mark this ticket as solved' 
+    // Allow developers and admins/moderators
+    if (userRole !== 'developer' && userRole !== 'admin' && userRole !== 'moderator') {
+      return res.status(403).json({ message: 'Only developers can mark tickets as solved' });
+    }
+    
+    // For developers, check if ticket is assigned to them
+    if (userRole === 'developer' && ticket.assigned_developer_id !== userId) {
+      return res.status(403).json({ message: 'You can only mark tickets assigned to you as solved' });
+    }
+    
+    // Admins/moderators can directly mark as solved without approval
+    if (userRole === 'admin' || userRole === 'moderator') {
+      const updates = {
+        solve_status: 'solved',
+        approved_by: userId,
+        approval_date: new Date()
+      };
+      
+      const updatedTicket = await ticketModel.updateTicket(ticketId, updates);
+      return res.status(200).json({
+        message: 'Ticket marked as solved',
+        ticket: updatedTicket
       });
     }
     
-    // Ticket must be open
-    if (ticket.flag_status !== 'open') {
-      return res.status(400).json({ 
-        message: 'Cannot mark a closed ticket as solved' 
-      });
-    }
-    
-    // Mark as solved but keep open (awaiting approval)
-    const updates = {
-      solve_status: 'solved',
-      resolved_by_id: userId,
-      resolved_at: new Date()
-    };
-    
-    const updatedTicket = await ticketModel.updateTicket(ticketId, updates);
+    // For developers, request approval
+    const updatedTicket = await ticketModel.requestResolution(ticketId, userId);
     
     res.status(200).json({
-      message: 'Ticket marked as solved. Awaiting moderator/admin approval.',
+      message: 'Resolution submitted for approval',
       ticket: updatedTicket
     });
   } catch (error) {
     console.error('Error in markAsSolved:', error);
+    res.status(500).json({ 
+      message: error.message || 'Server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+/**
+ * Developer requests resolution approval for a ticket
+ * POST /tickets/:ticketId/request-resolution
+ */
+const requestResolution = async (req, res) => {
+  try {
+    const { ticketId } = req.params;
+    const userId = req.user.id;
+    const userRole = req.user.role;
+    
+    // Only developers can request resolution
+    if (userRole !== 'developer') {
+      return res.status(403).json({ 
+        message: 'Only developers can request resolution approval' 
+      });
+    }
+    
+    const updatedTicket = await ticketModel.requestResolution(ticketId, userId);
+    
+    res.status(200).json({
+      message: 'Resolution submitted for approval',
+      ticket: updatedTicket
+    });
+  } catch (error) {
+    console.error('Error in requestResolution:', error);
+    res.status(500).json({ 
+      message: error.message || 'Server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+/**
+ * Moderator/Admin approves a ticket resolution
+ * POST /tickets/:ticketId/approve-resolution
+ */
+const approveResolution = async (req, res) => {
+  try {
+    const { ticketId } = req.params;
+    const userId = req.user.id;
+    const userRole = req.user.role;
+    
+    // Only moderators and admins can approve
+    if (userRole !== 'moderator' && userRole !== 'admin') {
+      return res.status(403).json({ 
+        message: 'Only moderators and admins can approve resolutions' 
+      });
+    }
+    
+    const result = await ticketModel.approveResolution(ticketId, userId);
+    
+    res.status(200).json({
+      message: 'Resolution approved successfully',
+      ticket: result.ticket,
+      pointsAwarded: result.pointsAwarded,
+      developerStats: result.developerStats
+    });
+  } catch (error) {
+    console.error('Error in approveResolution:', error);
+    res.status(500).json({ 
+      message: error.message || 'Server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+/**
+ * Moderator/Admin rejects a ticket resolution
+ * POST /tickets/:ticketId/reject-resolution
+ */
+const rejectResolution = async (req, res) => {
+  try {
+    const { ticketId } = req.params;
+    const { reason } = req.body;
+    const userId = req.user.id;
+    const userRole = req.user.role;
+    
+    // Only moderators and admins can reject
+    if (userRole !== 'moderator' && userRole !== 'admin') {
+      return res.status(403).json({ 
+        message: 'Only moderators and admins can reject resolutions' 
+      });
+    }
+    
+    if (!reason || reason.trim() === '') {
+      return res.status(400).json({ 
+        message: 'Rejection reason is required' 
+      });
+    }
+    
+    const updatedTicket = await ticketModel.rejectResolution(ticketId, userId, reason);
+    
+    res.status(200).json({
+      message: 'Resolution rejected',
+      ticket: updatedTicket
+    });
+  } catch (error) {
+    console.error('Error in rejectResolution:', error);
+    res.status(500).json({ 
+      message: error.message || 'Server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+/**
+ * Get tickets pending approval
+ * GET /tickets/pending-approval
+ */
+const getPendingApprovalTickets = async (req, res) => {
+  try {
+    const userRole = req.user.role;
+    
+    // Only moderators and admins can view pending approvals
+    if (userRole !== 'moderator' && userRole !== 'admin') {
+      return res.status(403).json({ 
+        message: 'Only moderators and admins can view pending approvals' 
+      });
+    }
+    
+    const tickets = await ticketModel.getTicketsByApprovalStatus('pending_approval');
+    
+    // Enrich with user data
+    const enrichedTickets = await Promise.all(
+      tickets.map(async (ticket) => {
+        return await ServiceRegistry.getCompleteTicketData(ticket.id, ticketModel);
+      })
+    );
+    
+    res.status(200).json({ 
+      tickets: enrichedTickets.filter(t => t !== null)
+    });
+  } catch (error) {
+    console.error('Error in getPendingApprovalTickets:', error);
     res.status(500).json({ message: 'Server error' });
   }
+};
+
+/**
+ * Get leaderboard
+ * GET /leaderboard
+ */
+const getLeaderboard = async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 50;
+    
+    const leaderboard = await ticketModel.getLeaderboard(limit);
+    
+    // Enrich with user data from user-service
+    const enrichedLeaderboard = await Promise.all(
+      leaderboard.map(async (entry) => {
+        try {
+          const userData = await ServiceRegistry.getUserData(entry.developer_id);
+          return {
+            rank: leaderboard.indexOf(entry) + 1,
+            developer_id: entry.developer_id,
+            name: userData ? `${userData.name} ${userData.surname}` : 'Unknown',
+            total_points: entry.total_points,
+            tickets_resolved: entry.tickets_resolved,
+            average_rating: parseFloat(entry.average_rating),
+            last_updated: entry.last_updated
+          };
+        } catch (error) {
+          console.error(`Error fetching user data for developer ${entry.developer_id}:`, error);
+          return {
+            rank: leaderboard.indexOf(entry) + 1,
+            developer_id: entry.developer_id,
+            name: 'Unknown',
+            total_points: entry.total_points,
+            tickets_resolved: entry.tickets_resolved,
+            average_rating: parseFloat(entry.average_rating),
+            last_updated: entry.last_updated
+          };
+        }
+      })
+    );
+    
+    res.status(200).json({ leaderboard: enrichedLeaderboard });
+  } catch (error) {
+    console.error('Error in getLeaderboard:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+/**
+ * Get developer statistics
+ * GET /developers/:developerId/stats
+ */
+const getDeveloperStats = async (req, res) => {
+  try {
+    const { developerId } = req.params;
+    
+    const stats = await ticketModel.getDeveloperStats(developerId);
+    
+    if (!stats) {
+      return res.status(404).json({ 
+        message: 'No statistics found for this developer' 
+      });
+    }
+    
+    // Enrich with user data
+    try {
+      const userData = await ServiceRegistry.getUserData(developerId);
+      stats.name = userData ? `${userData.name} ${userData.surname}` : 'Unknown';
+      stats.email = userData ? userData.email : null;
+    } catch (error) {
+      console.error(`Error fetching user data for developer ${developerId}:`, error);
+      stats.name = 'Unknown';
+    }
+    
+    res.status(200).json({ stats });
+  } catch (error) {
+    console.error('Error in getDeveloperStats:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+module.exports = {
+  createTicket,
+  getAllTickets,
+  getAllTicketsAdmin,
+  getTicketById,
+  updateTicket,
+  updateTicketAdmin,
+  deleteTicket,
+  rateTicket,
+  getTicketRating,
+  markAsSolved,
+  requestResolution,
+  approveResolution,
+  rejectResolution,
+  getPendingApprovalTickets,
+  getLeaderboard,
+  getDeveloperStats
 };
 
 /**

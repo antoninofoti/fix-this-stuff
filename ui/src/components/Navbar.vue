@@ -22,6 +22,11 @@
             </a>
           </li>
           <li v-if="isAuthenticated && isAdminOrModerator" class="nav-item">
+            <a class="nav-link pending-link" @click="router.push('/pending-approvals')" href="">
+              <i class="bi bi-clock-history"></i> Pending Approvals
+            </a>
+          </li>
+          <li v-if="isAuthenticated && isAdminOrModerator" class="nav-item">
             <a class="nav-link admin-link" @click="router.push('/admin')" href="">
               <i class="bi bi-shield-lock"></i> Admin
             </a>

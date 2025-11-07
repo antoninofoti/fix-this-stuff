@@ -7,6 +7,7 @@ import TicketView from '../views/TicketView.vue'
 import ProfileView from '../views/ProfileView.vue'
 import AdminView from '../views/AdminView.vue'
 import LeaderboardView from '../views/LeaderboardView.vue'
+import PendingApprovalsView from '../views/PendingApprovalsView.vue'
 import { useAuthStore } from '../store/auth'
 
 const routes = [
@@ -17,7 +18,8 @@ const routes = [
   { path: '/tickets/:ticketId', name: "Ticket Details", component: TicketView, props:true },
   { path: '/profile', name: 'Profile', component: ProfileView, meta: { requiresAuth: true } },
   { path: '/admin', name: 'Admin', component: AdminView, meta: { requiresAuth: true, requiresAdmin: true } },
-  { path: '/leaderboard', name: 'Leaderboard', component: LeaderboardView, meta: { requiresAuth: false } }
+  { path: '/leaderboard', name: 'Leaderboard', component: LeaderboardView, meta: { requiresAuth: false } },
+  { path: '/pending-approvals', name: 'PendingApprovals', component: PendingApprovalsView, meta: { requiresAuth: true, requiresModerator: true } }
 ]
 
 const router = createRouter({
@@ -32,6 +34,13 @@ router.beforeEach((to, from, next) => {
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
     next('/login')
   } else if (to.meta.requiresAdmin) {
+    const role = authStore.getRole?.toUpperCase()
+    if (role === 'ADMIN' || role === 'MODERATOR') {
+      next()
+    } else {
+      next('/')
+    }
+  } else if (to.meta.requiresModerator) {
     const role = authStore.getRole?.toUpperCase()
     if (role === 'ADMIN' || role === 'MODERATOR') {
       next()

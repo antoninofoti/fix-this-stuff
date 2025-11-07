@@ -53,6 +53,38 @@ router.post('/:ticketId/rating', authenticateRequest, authorizeAuthenticated, [
 // Get rating for a ticket
 router.get('/:ticketId/rating', ticketController.getTicketRating);
 
+// NEW RESOLUTION WORKFLOW ROUTES
+
+// Developer requests resolution approval
+router.post('/:ticketId/request-resolution', authenticateRequest, authorizeAuthenticated, ticketController.requestResolution);
+
+// Moderator/Admin approves resolution (awards points)
+router.post('/:ticketId/approve-resolution', authenticateRequest, authorizeModerator, ticketController.approveResolution);
+
+// Moderator/Admin rejects resolution
+router.post('/:ticketId/reject-resolution', authenticateRequest, authorizeModerator, [
+  body('reason').notEmpty().withMessage('Rejection reason is required')
+], ticketController.rejectResolution);
+
+// Get tickets pending approval
+router.get('/admin/pending-approval', authenticateRequest, authorizeModerator, ticketController.getPendingApprovalTickets);
+
+// LEADERBOARD ROUTES
+
+// Get leaderboard (public, shows only developers)
+router.get('/leaderboard/top', ticketController.getLeaderboard);
+
+// Get developer statistics
+router.get('/developers/:developerId/stats', ticketController.getDeveloperStats);
+
+// LEGACY WORKFLOW ROUTES (keeping for backward compatibility)
+
+// Developer marks ticket as solved (awaiting approval)
+router.post('/:ticketId/mark-solved', authenticateRequest, authorizeAuthenticated, ticketController.markAsSolved);
+
+module.exports = router;
+
+
 // NEW WORKFLOW ROUTES
 
 // Developer marks ticket as solved (awaiting approval)
