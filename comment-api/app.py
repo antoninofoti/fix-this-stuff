@@ -44,6 +44,36 @@ def token_required(f):
     return decorated
 
 
+def optional_token(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token = None
+        if 'Authorization' in request.headers:
+            auth_header = request.headers['Authorization']
+            if auth_header.startswith("Bearer "):
+                token = auth_header.split(" ")[1]
+        
+        if token:
+            try:
+                resp = requests.get(
+                    f"{AUTH_SERVICE_URL}/verify-token",
+                    headers={"Authorization": f"Bearer {token}"}
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    if data.get("valid"):
+                        # Attach user info to request
+                        request.user = data["user"]  # {'id': 2, 'email': ..., 'role': ...}
+                        return f(*args, **kwargs)
+            except Exception as e:
+                print(f"Token verification failed: {e}")
+        
+        # No token or invalid token, continue as guest
+        request.user = None
+        return f(*args, **kwargs)
+    return decorated
+
+
 app = Flask(__name__)
 CORS(app)
 
@@ -104,16 +134,8 @@ def publish_event(event_type, data):
 
 
 # Routes
-@app.before_request
-def log_headers():
-    print("---- Incoming request headers ----")
-    for header, value in request.headers.items():
-        print(f"{header}: {value}")
-    print("---------------------------------")
-
-
 @app.route('/tickets/<int:ticket_id>/comments', methods=['GET'])
-@token_required
+@optional_token
 def get_comments(ticket_id):
     comments = Comment.query.filter_by(ticket_id=ticket_id).order_by(Comment.creation_date).all()
     return jsonify([
@@ -133,7 +155,7 @@ def post_comment():
     data = request.get_json()
     comment_data = {
         "ticket_id": data.get("ticket_id"),
-        "author_id": request.user.get("id"),  # TODO: replace with JWT user_id later
+        "author_id": request.user.get("id"),
         "comment_text": data.get("comment_text"),
         "creation_date": datetime.datetime.now(datetime.timezone.utc).isoformat()
     }

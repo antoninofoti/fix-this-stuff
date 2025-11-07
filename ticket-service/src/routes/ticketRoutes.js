@@ -2,7 +2,7 @@ const express = require('express');
 const { body } = require('express-validator');
 const ticketController = require('../controllers/ticketController');
 // Import the enhanced authentication middleware
-const { authenticateRequest, authorizeAdmin, authorizeModerator, authorizeAuthenticated, authorizeTicketAccess } = require('../middleware/enhancedAuthMiddleware');
+const { authenticateRequest, optionalAuthentication, authorizeAdmin, authorizeModerator, authorizeAuthenticated, authorizeTicketAccess } = require('../middleware/enhancedAuthMiddleware');
 
 const router = express.Router();
 
@@ -14,14 +14,14 @@ router.post('/', authenticateRequest, authorizeAuthenticated, [
   body('priority').isIn(['low', 'medium', 'high']).withMessage('Invalid priority - must be low, medium, or high')
 ], ticketController.createTicket);
 
-// Get all tickets - all authenticated users (filtered by role in controller)
-router.get('/', authenticateRequest, authorizeAuthenticated, ticketController.getAllTickets);
+// Get all tickets - guests and authenticated users can view (filtered by role in controller)
+router.get('/', optionalAuthentication, ticketController.getAllTickets);
 
 // Special route for admins/moderators to get all tickets with extended information
 router.get('/admin/all', authenticateRequest, authorizeModerator, ticketController.getAllTicketsAdmin);
 
-// Get a specific ticket - requires authentication and proper access
-router.get('/:ticketId', authenticateRequest, authorizeTicketAccess, ticketController.getTicketById);
+// Get a specific ticket - guests and authenticated users can view (with proper filtering)
+router.get('/:ticketId', optionalAuthentication, ticketController.getTicketById);
 
 // Update a ticket - requires authentication and proper access
 router.put('/:ticketId', authenticateRequest, authorizeTicketAccess, [

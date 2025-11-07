@@ -78,7 +78,34 @@ const createUserInternal = async (req, res) => {
     });
   } catch (error) {
     console.error('Error in createUserInternal:', error);
-    res.status(500).json({ message: 'Server error' });
+    
+    // Handle specific error types
+    if (error.code === 'DUPLICATE_EMAIL') {
+      return res.status(409).json({ 
+        message: 'User with this email already exists',
+        code: 'DUPLICATE_EMAIL'
+      });
+    }
+    
+    if (error.code === 'DUPLICATE_CREDENTIALS') {
+      return res.status(409).json({ 
+        message: 'User with these credentials already exists',
+        code: 'DUPLICATE_CREDENTIALS'
+      });
+    }
+    
+    // Handle PostgreSQL unique constraint violations
+    if (error.code === '23505') {
+      return res.status(409).json({ 
+        message: 'User already exists',
+        code: 'DUPLICATE_USER'
+      });
+    }
+    
+    res.status(500).json({ 
+      message: 'Server error during user creation',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 };
 
@@ -91,8 +118,7 @@ const getUserById = async (req, res) => {
     
     // Admin can vedere tutti, developer/moderator solo il proprio profilo
     const allowedRoles = ['developer', 'moderator'];
-    // Debug: log valori
-    // console.log('userId param:', userId, 'req.user:', req.user);
+    
     if (req.user.role === 'admin') {
       // admin: access granted
     } else if (
@@ -195,55 +221,6 @@ const deleteUser = async (req, res) => {
   } catch (error) {
     console.error('Error in deleteUser:', error);
     res.status(500).json({ message: 'Server error' });
-  }
-};
-
-/**
- * Internal endpoint to create a user, called by auth-service
- */
-const internalCreateUser = async (req, res) => {
-  try {
-    const { email, firstName, lastName, role, credentialsId } = req.body;
-
-    // Basic validation
-    if (!email || !firstName || !lastName || !credentialsId) {
-      return res.status(400).json({ message: 'Missing required fields for internal user creation' });
-    }
-
-    // Check if user already exists by email or credentialsId
-    const existingByEmail = await userModel.findByEmail(email);
-    if (existingByEmail) {
-      return res.status(409).json({ message: 'User with this email already exists' });
-    }
-
-    // In a real scenario, you might want to check if a user with credentialsId already exists
-    // if credentialsId is not the primary key or unique.
-    // For now, we assume credentialsId will be unique or handled by DB constraints.
-
-    const newUser = await userModel.create({
-      email,
-      firstName,
-      lastName,
-      role: role || 'user',
-      credentialsId
-    });
-
-    // We don't typically return the full user object on internal calls,
-    // but for confirmation, we can return the ID or a success message.
-    res.status(201).json({
-      message: 'User profile created successfully via internal call',
-      userId: newUser.id,
-      user: newUser // Returning the user object for now, can be trimmed later
-    });
-
-  } catch (error) {
-    console.error('Error in internalCreateUser:', error);
-    // If the error is due to a unique constraint violation (e.g., email already exists)
-    // which might not be caught by the above check if there's a race condition.
-    if (error.code === '23505') { // PostgreSQL unique violation error code
-        return res.status(409).json({ message: 'User creation failed due to a conflict (e.g., email or credentialsId already exists).' });
-    }
-    res.status(500).json({ message: 'Server error during internal user creation' });
   }
 };
 
@@ -461,7 +438,7 @@ module.exports = {
   createUserInternal,
   updateUser,
   deleteUser,
-  internalCreateUser, // Add new controller
+  createUserInternal, // Internal endpoint for user creation
   internalGetUserById, // Add internal getUserById
   getUsersByRole,
   updateUserRole,

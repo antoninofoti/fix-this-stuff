@@ -4,15 +4,6 @@ const authController = require('../controllers/authController');
 const credentialController = require('../controllers/credentialController');
 const { authenticateRequest } = require('../middleware/auth_Middleware');
 
-// --- BEGIN DEBUG LOG ---
-console.log('--- DEBUG: authRoutes.js ---');
-console.log('typeof authController:', typeof authController);
-if (authController) console.log('authController keys:', Object.keys(authController));
-console.log('typeof credentialController:', typeof credentialController);
-if (credentialController) console.log('credentialController keys:', Object.keys(credentialController));
-console.log('typeof credentialController.getCredentialById:', typeof credentialController.getCredentialById);
-// --- END DEBUG LOG ---
-
 const router = express.Router();
 
 // Health check endpoint

@@ -96,19 +96,28 @@ const getAllTickets = async (req, res) => {
     if (req.user) {
       const userId = req.user.id;
       const userRole = req.user.role;
-      // Admins and moderators can see all tickets
-      if (userRole === 'admin' || userRole === 'moderator') {
-        tickets = await ticketModel.getAllTickets();
-      } else {
-        // Regular users possono vedere solo i propri ticket
-        // Se vuoi implementare questa funzione, serve ticketModel.getTicketsByUserId(userId)
-        tickets = await ticketModel.getAllTickets({ authorId: userId });
-      }
+      
+      // All authenticated users can see all tickets
+      // (This is for the public ticket view, not personal dashboard)
+      tickets = await ticketModel.getAllTickets();
+      
+      // Get complete data for each ticket
+      const ticketsWithDetails = await Promise.all(tickets.map(async ticket => {
+        return await ServiceRegistry.getCompleteTicketData(ticket.id, ticketModel);
+      }));
+      
+      res.status(200).json({ tickets: ticketsWithDetails });
     } else {
       // Unauthenticated users can see all public tickets
-      tickets = await ticketModel.getAllTickets(); // Puoi filtrare qui se vuoi
+      tickets = await ticketModel.getAllTickets();
+      
+      // Get complete data for each ticket
+      const ticketsWithDetails = await Promise.all(tickets.map(async ticket => {
+        return await ServiceRegistry.getCompleteTicketData(ticket.id, ticketModel);
+      }));
+      
+      res.status(200).json({ tickets: ticketsWithDetails });
     }
-    res.status(200).json({ tickets });
   } catch (error) {
     console.error('Error in getAllTickets:', error);
     res.status(500).json({ message: 'Server error' });
@@ -250,19 +259,25 @@ const updateTicket = async (req, res) => {
       
     } else if (ticket.request_author_id === userId) {
       // Regular users can only update title, description, category, and priority of their own tickets
-      // And only if the ticket is not already being worked on
-      if (ticket.flag_status !== 'open') {
-        return res.status(403).json({
-          message: 'You cannot update this ticket as it is already being processed'
-        });
+      // They can also close their own tickets
+      const { title, description, category, priority, flag_status } = req.body;
+      
+      // Can update basic fields only if ticket is open
+      if (ticket.flag_status === 'open') {
+        if (title) updates.title = title;
+        if (description) updates.request = description;
+        if (category) updates.system_id = category;
+        if (priority) updates.priority = priority;
       }
       
-      const { title, description, category, priority } = req.body;
-      
-      if (title) updates.title = title;
-      if (description) updates.request = description;
-      if (category) updates.system_id = category;
-      if (priority) updates.priority = priority;
+      // Can close the ticket anytime (but not reopen)
+      if (flag_status === 'closed') {
+        updates.flag_status = 'closed';
+        updates.closed_by = userId;
+        updates.closed_date = new Date();
+        // When author closes, it's not solved
+        updates.solve_status = 'not_solved';
+      }
       
     } else {
       return res.status(403).json({
@@ -353,16 +368,41 @@ const updateTicketAdmin = async (req, res) => {
       updateFields.closed_by = req.user.id;
       updateFields.closed_date = new Date();
       
-      // Calculate and award points if ticket is solved and has an assigned developer
-      if (solve_status === 'solved' && ticket.assigned_developer_id) {
-        try {
-          const score = calculateTicketScore(ticket.priority, ticket.opening_date, ticket.deadline_date);
-          console.log(`Awarding ${score} points to developer ${ticket.assigned_developer_id} for solving ticket ${ticketId}`);
-          
-          await ServiceRegistry.updateUserScore(ticket.assigned_developer_id, score);
-        } catch (error) {
-          console.error('Error awarding score:', error);
-          // Don't fail the ticket update if score update fails
+      // Calculate and award points if ticket is solved
+      if (solve_status === 'solved') {
+        // Determine who should get the points
+        let developerId = ticket.assigned_developer_id;
+        
+        // If no developer is assigned but a moderator/admin is closing it as solved,
+        // assign the developer to the person closing it if they're not an admin/moderator
+        if (!developerId) {
+          const userRole = req.user.role;
+          if (userRole !== 'admin' && userRole !== 'moderator') {
+            // Assign to the user closing it (developer)
+            developerId = req.user.id;
+            updateFields.assigned_developer_id = developerId;
+            updateFields.assigned_by = req.user.id;
+            updateFields.assigned_date = new Date();
+          } else if (userRole === 'admin' || userRole === 'moderator') {
+            // Admin/Moderator closing it - assign to themselves if no one else is assigned
+            developerId = req.user.id;
+            updateFields.assigned_developer_id = developerId;
+            updateFields.assigned_by = req.user.id;
+            updateFields.assigned_date = new Date();
+          }
+        }
+        
+        // Award points to the developer
+        if (developerId) {
+          try {
+            const score = calculateTicketScore(ticket.priority, ticket.opening_date, ticket.deadline_date);
+            console.log(`Awarding ${score} points to developer ${developerId} for solving ticket ${ticketId}`);
+            
+            await ServiceRegistry.updateUserScore(developerId, score);
+          } catch (error) {
+            console.error('Error awarding score:', error);
+            // Don't fail the ticket update if score update fails
+          }
         }
       }
     }

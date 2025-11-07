@@ -61,7 +61,23 @@ public class ApiGatewayController {
         }
         
         HttpEntity<String> entity = new HttpEntity<>(body, headers);
-        return restTemplate.exchange(url, HttpMethod.valueOf(request.getMethod()), entity, String.class);
+        
+        try {
+            return restTemplate.exchange(url, HttpMethod.valueOf(request.getMethod()), entity, String.class);
+        } catch (HttpClientErrorException e) {
+            // Forward 4xx errors as-is (like 401, 409, etc.) with proper content type
+            HttpHeaders responseHeaders = new HttpHeaders();
+            responseHeaders.setContentType(MediaType.APPLICATION_JSON);
+            return ResponseEntity.status(e.getStatusCode())
+                .headers(responseHeaders)
+                .body(e.getResponseBodyAsString());
+        } catch (Exception e) {
+            // Handle other errors
+            logger.error("Error forwarding to auth service: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body("{\"message\":\"Gateway error: " + e.getMessage() + "\"}");
+        }
     }
 
     /**

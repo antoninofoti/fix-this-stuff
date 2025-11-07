@@ -25,7 +25,7 @@ app.use((req, res, next) => {
 });
 
 // Internal routes (no authentication required)
-app.post('/api/users/internal/create', userController.internalCreateUser);
+app.post('/api/users/internal/create', userController.createUserInternal);
 app.get('/api/users/internal/:userId', userController.internalGetUserById);
 app.get('/api/users/by-credential/:credentialId', userController.getUserByCredentialId);
 

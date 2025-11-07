@@ -3,14 +3,11 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Copy source code first
+# Copy all source files
 COPY . .
 
-# Remove any existing node_modules
-RUN rm -rf node_modules package-lock.json
-
-# Install dependencies fresh
-RUN npm install
+# Clean install of dependencies
+RUN npm ci --ignore-scripts || npm install
 
 # Build arguments for environment variables
 ARG VITE_AUTH_API_URL

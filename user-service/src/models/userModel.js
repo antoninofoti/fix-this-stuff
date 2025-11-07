@@ -93,51 +93,6 @@ const UserModel = {
   },
 
   /**
-   * Creates a new user profile in the database (called by auth-service)
-   * @param {Object} userData - Data for the new user (email, firstName, lastName, role, credentialsId)
-   * @returns {Promise<Object>} Created user profile
-   */
-  async create(userData) {
-    try {
-      const { email, firstName, lastName, role, credentialsId } = userData;
-
-      // Check if email already exists
-      const existingUserByEmail = await this.findByEmail(email);
-      if (existingUserByEmail) {
-        const error = new Error('User with this email already exists');
-        error.code = '23505';
-        throw error;
-      }
-
-      // Check if a user with this credentialsId already exists
-      const existingUserByCredentialsId = await this.findByCredentialsId(credentialsId);
-      if (existingUserByCredentialsId) {
-        const error = new Error('User with this credentialsId already exists');
-        error.code = '23505';
-        throw error;
-      }
-
-      const userQuery = `
-        INSERT INTO users (email, name, surname, role, credentials_id, registration_date)
-        VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)
-        RETURNING id, email, name, surname, role, credentials_id, registration_date as created_at
-      `;
-      const userValues = [
-        email,
-        firstName,
-        lastName,
-        role || 'developer', // Use 'developer' as default to match schema
-        credentialsId
-      ];
-      const { rows } = await db.query(userQuery, userValues);
-      return rows[0];
-    } catch (error) {
-      console.error('Error creating user profile:', error);
-      throw error;
-    }
-  },
-
-  /**
    * Retrieves a user by their email address.
    * @param {string} email - The email address of the user.
    * @returns {Promise<Object|null>} The user object if found, otherwise null.
@@ -396,6 +351,24 @@ const UserModel = {
   async createUser(userData) {
     try {
       const { email, firstName, lastName, role, credentialsId } = userData;
+      
+      // Check if user with this email already exists
+      const existingUserByEmail = await this.findByEmail(email);
+      if (existingUserByEmail) {
+        const error = new Error('User with this email already exists');
+        error.code = 'DUPLICATE_EMAIL';
+        error.statusCode = 409;
+        throw error;
+      }
+      
+      // Check if user with this credentialsId already exists
+      const existingUserByCredentialsId = await this.findByCredentialsId(credentialsId);
+      if (existingUserByCredentialsId) {
+        const error = new Error('User with this credentialsId already exists');
+        error.code = 'DUPLICATE_CREDENTIALS';
+        error.statusCode = 409;
+        throw error;
+      }
       
       const query = `
         INSERT INTO users (email, name, surname, role, credentials_id, registration_date)

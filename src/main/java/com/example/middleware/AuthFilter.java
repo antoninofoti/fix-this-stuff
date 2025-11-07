@@ -51,6 +51,18 @@ public class AuthFilter implements Filter {
             return;
         }
         
+        // Skip authentication for GET tickets (guest access allowed)
+        if (requestURI.startsWith("/api/tickets") && "GET".equals(method)) {
+            chain.doFilter(request, response);
+            return;
+        }
+        
+        // Skip authentication for GET comments (guest access allowed)
+        if (requestURI.startsWith("/api/comments") && "GET".equals(method)) {
+            chain.doFilter(request, response);
+            return;
+        }
+        
         String internalAuthHeader = httpRequest.getHeader("X-Internal-Auth");
         if (internalAuthHeader != null) {
             sendUnauthorizedResponse(httpResponse, "X-Internal-Auth header is not allowed from external requests");

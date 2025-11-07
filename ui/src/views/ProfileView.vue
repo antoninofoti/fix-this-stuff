@@ -109,8 +109,9 @@ const userId = computed(() => authStore.getUserId)
 
 const userTickets = computed(() => {
   const allTickets = ticketStore.getTickets
-  const email = authStore.getEmail
-  return allTickets.filter(ticket => ticket.created_by === email)
+  const currentUserId = authStore.getUserId
+  // Filter by request_author_id (user ID) instead of created_by (email)
+  return allTickets.filter(ticket => ticket.request_author_id === parseInt(currentUserId))
 })
 
 const recentTickets = computed(() => {

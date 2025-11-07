@@ -5,7 +5,7 @@ const API_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8081/api'
 export const commentApi = {
   // Ottieni tutti i commenti per un ticket
   getCommentsByTicket(ticketId, token) {
-    return axios.get(`${API_URL}/comments/tickets/${ticketId}/comments`, {
+    return axios.get(`${API_URL}/tickets/${ticketId}/comments`, {
       headers: token ? {
         Authorization: `Bearer ${token}`
       } : {}
@@ -15,7 +15,7 @@ export const commentApi = {
   // Crea un nuovo commento
   createComment(ticketId, commentText, token) {
     return axios.post(
-      `${API_URL}/comments/comments`,
+      `${API_URL}/comments`,
       {
         ticket_id: ticketId,
         comment_text: commentText
@@ -31,7 +31,7 @@ export const commentApi = {
   // Aggiorna un commento
   updateComment(commentId, commentText, token) {
     return axios.put(
-      `${API_URL}/comments/comments/${commentId}`,
+      `${API_URL}/comments/${commentId}`,
       {
         comment_text: commentText
       },
@@ -46,7 +46,7 @@ export const commentApi = {
   // Elimina un commento
   deleteComment(commentId, token) {
     return axios.delete(
-      `${API_URL}/comments/comments/${commentId}`,
+      `${API_URL}/comments/${commentId}`,
       {
         headers: {
           Authorization: `Bearer ${token}`

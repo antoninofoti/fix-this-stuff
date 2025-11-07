@@ -196,11 +196,6 @@
   const loading = ref(false)
 
   const fetchTickets = async () => {
-    // Solo gli utenti autenticati possono caricare i ticket
-    if (!authStore.isAuthenticated) {
-      return
-    }
-    
     loading.value = true
     try {
       await ticketStore.fetchAllTickets()

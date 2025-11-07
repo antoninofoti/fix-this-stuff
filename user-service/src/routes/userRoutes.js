@@ -1,8 +1,8 @@
 const express = require('express');
 const { body } = require('express-validator');
 const userController = require('../controllers/userController');
-// Import the enhanced authentication middleware
-const { authenticateRequest, authorizeAdmin, authorizeOwnerOrAdmin } = require('../middleware/enhancedAuthMiddleware');
+// Import the authentication middleware
+const { authenticateRequest, authorizeAdmin, authorizeOwnerOrAdmin } = require('../middleware/simplifiedAuthMiddleware');
 
 const router = express.Router();
 
