@@ -149,16 +149,39 @@ api_bp = Blueprint('api', __name__, url_prefix='/api')
 @optional_token
 def get_comments(ticket_id):
     comments = Comment.query.filter_by(ticket_id=ticket_id).order_by(Comment.creation_date).all()
-    return jsonify([
-        {
+    
+    # Populate author details for each comment
+    comments_with_authors = []
+    user_service_url = os.getenv("USER_SERVICE_URL", "http://user-service:3002")
+    
+    for c in comments:
+        comment_data = {
             "id": c.id,
             "ticket_id": c.ticket_id,
             "author_id": c.author_id,
             "comment_text": c.comment_text,
-            "creation_date": c.creation_date.strftime("%Y-%m-%d %H:%M")
+            "creation_date": c.creation_date.isoformat()
         }
-        for c in comments
-    ])
+        
+        # Fetch author details from user-service
+        try:
+            resp = requests.get(f"{user_service_url}/api/users/internal/{c.author_id}", timeout=3)
+            if resp.status_code == 200:
+                user_data = resp.json().get("user")
+                if user_data:
+                    comment_data["author"] = {
+                        "name": user_data.get("name"),
+                        "surname": user_data.get("surname"),
+                        "email": user_data.get("email"),
+                        "username": user_data.get("username")
+                    }
+        except Exception as e:
+            print(f"[!] Failed to fetch user {c.author_id}: {e}", flush=True)
+            # Continue without author details
+        
+        comments_with_authors.append(comment_data)
+    
+    return jsonify(comments_with_authors)
 
 @api_bp.route('/comments', methods=['POST'])
 @token_required

@@ -431,6 +431,53 @@ const getLeaderboard = async (req, res) => {
   }
 };
 
+/**
+ * Search users by name, surname, or email
+ * Requires authentication (any authenticated user can search)
+ */
+const searchUsers = async (req, res) => {
+  try {
+    const { q, query, limit } = req.query;
+    
+    // Accept both 'q' and 'query' parameters for compatibility
+    const searchQuery = query || q;
+    
+    // Require at least 2 characters for search
+    if (!searchQuery || searchQuery.trim().length < 2) {
+      return res.status(400).json({ 
+        message: 'Search query must be at least 2 characters long' 
+      });
+    }
+    
+    // Validate and set limit
+    const searchLimit = Math.min(parseInt(limit) || 20, 50); // Max 50 results
+    
+    // Use the existing getAllUsers with search filter
+    const users = await userModel.getAllUsers({ search: searchQuery.trim() });
+    
+    // Limit results
+    const limitedUsers = users.slice(0, searchLimit);
+    
+    // Remove sensitive information
+    const sanitizedUsers = limitedUsers.map(user => ({
+      id: user.id,
+      name: user.name,
+      surname: user.surname,
+      email: user.email,
+      role: user.role
+    }));
+    
+    res.status(200).json({ 
+      users: sanitizedUsers,
+      count: sanitizedUsers.length,
+      query: searchQuery.trim()
+    });
+  } catch (error) {
+    console.error('Error in searchUsers:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
 module.exports = {
   getAllUsers,
   getUserById,
@@ -445,5 +492,6 @@ module.exports = {
   getPrivilegedUsers,
   updateUserRank,
   updateUserScore,
-  getLeaderboard
+  getLeaderboard,
+  searchUsers
 };

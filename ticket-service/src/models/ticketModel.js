@@ -394,13 +394,10 @@ const TicketModel = {
    * @returns {Promise<Object>} Created rating
    */
   async createTicketRating(ratingData) {
-    const client = await db.getClient();
     try {
-      await client.query('BEGIN');
-      
       // Check if rating already exists for this ticket
       const checkQuery = `SELECT id FROM ticket_rating WHERE ticket_id = $1`;
-      const checkResult = await client.query(checkQuery, [ratingData.ticket_id]);
+      const checkResult = await db.query(checkQuery, [ratingData.ticket_id]);
       
       if (checkResult.rows.length > 0) {
         throw new Error('This ticket has already been rated');
@@ -413,27 +410,17 @@ const TicketModel = {
         RETURNING *
       `;
       
-      const { rows } = await client.query(insertQuery, [
+      const { rows } = await db.query(insertQuery, [
         ratingData.ticket_id,
         ratingData.rating,
         ratingData.comment || null,
         ratingData.rated_by
       ]);
       
-      // Update ticket with rating_id
-      await client.query(
-        'UPDATE ticket SET rating_id = $1 WHERE id = $2',
-        [rows[0].id, ratingData.ticket_id]
-      );
-      
-      await client.query('COMMIT');
       return rows[0];
     } catch (error) {
-      await client.query('ROLLBACK');
       console.error('Error creating ticket rating:', error);
       throw error;
-    } finally {
-      client.release();
     }
   },
 
@@ -524,16 +511,17 @@ const TicketModel = {
    * Awards points to the developer
    * @param {number} ticketId - Ticket ID
    * @param {number} approverId - Moderator/Admin approving
+   * @param {boolean} closeTicket - Whether to close the ticket (default: true)
    * @returns {Promise<Object>} Updated ticket with points awarded
    */
-  async approveResolution(ticketId, approverId) {
+  async approveResolution(ticketId, approverId, closeTicket = true) {
     const client = await db.getClient();
     try {
       await client.query('BEGIN');
       
       // Get ticket details
       const ticketQuery = `
-        SELECT id, resolved_by, solve_status, priority, rating_id
+        SELECT id, resolved_by, solve_status, priority
         FROM ticket 
         WHERE id = $1
       `;
@@ -553,6 +541,11 @@ const TicketModel = {
         throw new Error('No developer assigned to this resolution');
       }
       
+      // Prevent self-approval: the person approving cannot be the same as the person who resolved
+      if (ticket.resolved_by === approverId) {
+        throw new Error('You cannot approve a ticket that you resolved yourself');
+      }
+      
       // Calculate base points based on priority
       const priorityPoints = {
         'high': 10,
@@ -564,27 +557,49 @@ const TicketModel = {
       
       // Add bonus points if ticket has a rating
       let ratingBonus = 0;
-      if (ticket.rating_id) {
-        const ratingQuery = `SELECT rating FROM ticket_rating WHERE id = $1`;
-        const ratingResult = await client.query(ratingQuery, [ticket.rating_id]);
-        if (ratingResult.rows.length > 0) {
-          const rating = ratingResult.rows[0].rating;
-          ratingBonus = rating * 2; // rating 1-5 gives 2-10 bonus points
-          pointsAwarded += ratingBonus;
-        }
+      const ratingQuery = `SELECT rating FROM ticket_rating WHERE ticket_id = $1`;
+      const ratingResult = await client.query(ratingQuery, [ticketId]);
+      if (ratingResult.rows.length > 0) {
+        const rating = ratingResult.rows[0].rating;
+        ratingBonus = rating * 2; // rating 1-5 gives 2-10 bonus points
+        pointsAwarded += ratingBonus;
       }
       
-      // Update ticket
-      const updateTicketQuery = `
-        UPDATE ticket 
-        SET solve_status = 'solved',
-            approved_by = $1,
-            approval_date = NOW()
-        WHERE id = $2
-        RETURNING *
-      `;
+      // Build update query - conditionally close ticket
+      let updateTicketQuery;
+      let updateParams;
       
-      const { rows } = await client.query(updateTicketQuery, [approverId, ticketId]);
+      if (closeTicket) {
+        updateTicketQuery = `
+          UPDATE ticket 
+          SET solve_status = 'solved',
+              flag_status = 'closed',
+              approved_by = $1,
+              approval_date = NOW(),
+              closed_by = $1,
+              closed_date = NOW()
+          WHERE id = $2
+          RETURNING *
+        `;
+        updateParams = [approverId, ticketId];
+      } else {
+        updateTicketQuery = `
+          UPDATE ticket 
+          SET solve_status = 'solved',
+              approved_by = $1,
+              approval_date = NOW()
+          WHERE id = $2
+          RETURNING *
+        `;
+        updateParams = [approverId, ticketId];
+      }
+      
+      const { rows } = await client.query(updateTicketQuery, updateParams);
+      
+      // Check if resolved_by is a developer (only developers get points)
+      // We need to call user-service to check the role
+      // For now, we'll award points and let the controller handle the role check
+      // This is a safeguard: we should only award points if it's a developer
       
       // Update or create developer_points record
       const upsertPointsQuery = `
@@ -604,7 +619,7 @@ const TicketModel = {
       const avgRatingQuery = `
         SELECT AVG(tr.rating) as avg_rating
         FROM ticket t
-        JOIN ticket_rating tr ON t.rating_id = tr.id
+        JOIN ticket_rating tr ON tr.ticket_id = t.id
         WHERE t.resolved_by = $1 AND t.solve_status = 'solved'
       `;
       

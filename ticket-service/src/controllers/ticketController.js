@@ -226,6 +226,8 @@ const getTicketById = async (req, res) => {
  */
 const updateTicket = async (req, res) => {
   try {
+    console.log('updateTicket called with params:', req.params, 'body:', req.body, 'user:', req.user);
+    
     // Validate request
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -240,13 +242,44 @@ const updateTicket = async (req, res) => {
       return res.status(404).json({ message: 'Ticket not found' });
     }
     
+    console.log('Current ticket state:', ticket);
+    
     const userId = req.user.id;
     const userRole = req.user.role;
     
     // Determine what can be updated based on role
     let updates = {};
     
-    if (userRole === 'admin' || userRole === 'moderator') {
+    // Check for self-assignment FIRST (before author check) - all authenticated users can self-assign
+    const { assigned_developer_id } = req.body;
+    if (assigned_developer_id !== undefined) {
+      console.log('User attempting self-assignment. UserId:', userId, 'Role:', userRole, 'Body:', req.body);
+      
+      // Only allow self-assignment
+      if (assigned_developer_id === userId) {
+        // Only allow assignment if ticket is open and not already assigned
+        if (ticket.flag_status === 'open' && !ticket.assigned_developer_id) {
+          updates.assigned_developer_id = userId;
+          updates.assigned_date = new Date();
+          console.log('Self-assignment allowed. Updates:', updates);
+        } else if (ticket.assigned_developer_id) {
+          console.log('Ticket already assigned to:', ticket.assigned_developer_id);
+          return res.status(400).json({
+            message: 'Ticket is already assigned to another user'
+          });
+        } else if (ticket.flag_status !== 'open') {
+          console.log('Ticket is not open. Status:', ticket.flag_status);
+          return res.status(400).json({
+            message: 'Only open tickets can be assigned'
+          });
+        }
+      } else {
+        console.log('Developer trying to assign to someone else:', assigned_developer_id);
+        return res.status(403).json({
+          message: 'You can only assign tickets to yourself'
+        });
+      }
+    } else if (userRole === 'admin' || userRole === 'moderator') {
       // Admins and moderators can update all fields
       const { title, description, category, priority, status, assigned_to } = req.body;
       
@@ -280,17 +313,25 @@ const updateTicket = async (req, res) => {
       }
       
     } else {
+      console.log('No matching role/permission. Role:', userRole, 'userId:', userId, 'ticket.request_author_id:', ticket.request_author_id);
       return res.status(403).json({
         message: 'You do not have permission to update this ticket'
       });
     }
     
+    console.log('Updates to apply:', updates);
+    
     // Update the ticket
     const updatedTicket = await ticketModel.updateTicket(ticketId, updates);
 
+    // Fetch complete ticket data with user details
+    const completeTicket = await ServiceRegistry.getCompleteTicketData(ticketId, ticketModel);
+
+    console.log('Ticket updated successfully:', completeTicket);
+
     res.status(200).json({
       message: 'Ticket updated successfully',
-      ticket: updatedTicket
+      ticket: completeTicket || updatedTicket
     });
   } catch (error) {
     console.error('Error in updateTicket:', error);
@@ -358,7 +399,6 @@ const updateTicketAdmin = async (req, res) => {
         }
       }
       updateFields.assigned_developer_id = assigned_developer_id;
-      updateFields.assigned_by = req.user.id;
       updateFields.assigned_date = new Date();
     }
     if (answer) updateFields.answer = answer;
@@ -381,13 +421,11 @@ const updateTicketAdmin = async (req, res) => {
             // Assign to the user closing it (developer)
             developerId = req.user.id;
             updateFields.assigned_developer_id = developerId;
-            updateFields.assigned_by = req.user.id;
             updateFields.assigned_date = new Date();
           } else if (userRole === 'admin' || userRole === 'moderator') {
             // Admin/Moderator closing it - assign to themselves if no one else is assigned
             developerId = req.user.id;
             updateFields.assigned_developer_id = developerId;
-            updateFields.assigned_by = req.user.id;
             updateFields.assigned_date = new Date();
           }
         }
@@ -678,10 +716,17 @@ const requestResolution = async (req, res) => {
     const userId = req.user.id;
     const userRole = req.user.role;
     
-    // Only developers can request resolution
-    if (userRole !== 'developer') {
+    // All authenticated users can request resolution (developer, moderator, admin)
+    // They must be assigned to the ticket to request resolution
+    const ticket = await ticketModel.getTicketById(ticketId);
+    
+    if (!ticket) {
+      return res.status(404).json({ message: 'Ticket not found' });
+    }
+    
+    if (ticket.assigned_developer_id !== userId) {
       return res.status(403).json({ 
-        message: 'Only developers can request resolution approval' 
+        message: 'Only the assigned user can request resolution approval for this ticket' 
       });
     }
     
@@ -703,10 +748,12 @@ const requestResolution = async (req, res) => {
 /**
  * Moderator/Admin approves a ticket resolution
  * POST /tickets/:ticketId/approve-resolution
+ * Body: { closeTicket: boolean } - optional, defaults to true
  */
 const approveResolution = async (req, res) => {
   try {
     const { ticketId } = req.params;
+    const { closeTicket = true } = req.body; // Default to closing ticket
     const userId = req.user.id;
     const userRole = req.user.role;
     
@@ -717,7 +764,18 @@ const approveResolution = async (req, res) => {
       });
     }
     
-    const result = await ticketModel.approveResolution(ticketId, userId);
+    const result = await ticketModel.approveResolution(ticketId, userId, closeTicket);
+    
+    // Update user score in user-service (for all roles: developer, moderator, admin)
+    if (result.ticket.resolved_by && result.pointsAwarded) {
+      try {
+        await ServiceRegistry.updateUserScore(result.ticket.resolved_by, result.pointsAwarded);
+        console.log(`Updated user score for user ${result.ticket.resolved_by}: +${result.pointsAwarded} points`);
+      } catch (error) {
+        console.error('Error updating user score in user-service:', error);
+        // Don't fail the approval if score update fails
+      }
+    }
     
     res.status(200).json({
       message: 'Resolution approved successfully',
@@ -1035,6 +1093,61 @@ const closeUnsolved = async (req, res) => {
   }
 };
 
+/**
+ * Search tickets by query string
+ * Searches in: id, title, description, category, created_by
+ */
+const searchTickets = async (req, res) => {
+  try {
+    const { query } = req.query;
+
+    if (!query || query.trim().length < 2) {
+      return res.status(400).json({ 
+        message: 'Search query must be at least 2 characters long' 
+      });
+    }
+
+    // Get all tickets
+    const allTickets = await ticketModel.getAllTickets();
+
+    // Filter tickets based on search query
+    const lowerQuery = query.toLowerCase().trim();
+    
+    const filteredTickets = allTickets.filter(ticket => {
+      const id = ticket.id ? ticket.id.toString() : '';
+      const title = ticket.title ? ticket.title.toLowerCase() : '';
+      const description = ticket.request ? ticket.request.toLowerCase() : '';
+      const category = ticket.system_id ? ticket.system_id.toString() : '';
+      const status = ticket.flag_status ? ticket.flag_status.toLowerCase() : '';
+      const priority = ticket.priority ? ticket.priority.toLowerCase() : '';
+      
+      return id.includes(lowerQuery) ||
+             title.includes(lowerQuery) ||
+             description.includes(lowerQuery) ||
+             category.includes(lowerQuery) ||
+             status.includes(lowerQuery) ||
+             priority.includes(lowerQuery);
+    });
+
+    // Limit results to 50
+    const limitedResults = filteredTickets.slice(0, 50);
+
+    // Get complete data for each ticket
+    const ticketsWithDetails = await Promise.all(limitedResults.map(async ticket => {
+      return await ServiceRegistry.getCompleteTicketData(ticket.id, ticketModel);
+    }));
+
+    res.status(200).json({ 
+      tickets: ticketsWithDetails,
+      total: filteredTickets.length,
+      showing: ticketsWithDetails.length
+    });
+  } catch (error) {
+    console.error('Error in searchTickets:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
 module.exports = {
   createTicket,
   getAllTickets,
@@ -1054,5 +1167,6 @@ module.exports = {
   getDeveloperStats,
   approveAndClose,
   rejectSolution,
-  closeUnsolved
+  closeUnsolved,
+  searchTickets
 };

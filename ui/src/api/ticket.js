@@ -19,8 +19,8 @@ export const requestResolution = (ticketId) => {
   return ticketApi.post(`/${ticketId}/request-resolution`);
 };
 
-export const approveResolution = (ticketId) => {
-  return ticketApi.post(`/${ticketId}/approve-resolution`);
+export const approveResolution = (ticketId, closeTicket = true) => {
+  return ticketApi.post(`/${ticketId}/approve-resolution`, { closeTicket });
 };
 
 export const rejectResolution = (ticketId, reason) => {
@@ -37,6 +37,13 @@ export const getLeaderboard = (limit = 10) => {
 
 export const getDeveloperStats = (developerId) => {
   return ticketApi.get(`/leaderboard/developer/${developerId}`);
+};
+
+// Search tickets
+export const searchTickets = (query, limit = 50) => {
+  return ticketApi.get('/search', { 
+    params: { query, limit } 
+  }).then(response => response.data);
 };
 
 export default ticketApi;

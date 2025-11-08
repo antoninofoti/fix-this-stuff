@@ -17,6 +17,9 @@ router.post('/', authenticateRequest, authorizeAuthenticated, [
 // Get all tickets - guests and authenticated users can view (filtered by role in controller)
 router.get('/', optionalAuthentication, ticketController.getAllTickets);
 
+// Search tickets - all authenticated users can search
+router.get('/search', optionalAuthentication, ticketController.searchTickets);
+
 // Special route for admins/moderators to get all tickets with extended information
 router.get('/admin/all', authenticateRequest, authorizeModerator, ticketController.getAllTicketsAdmin);
 

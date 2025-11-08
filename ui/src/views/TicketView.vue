@@ -41,11 +41,11 @@
             </span>
           </div>
           <div class="detail-row">
-            <strong><i class="bi bi-coin"></i> Potential Score:</strong>
+            <strong><i class="bi bi-coin"></i> Base Reward:</strong>
             <span class="potential-score">
               <i class="bi bi-trophy"></i>
               {{ calculatePotentialScore() }} points
-              <span class="info-badge ms-2" title="Score calculated based on priority and time to resolve">
+              <span class="info-badge ms-2" title="Base points for this priority. Bonus of +2 to +10 points available if requester rates the solution.">
                 <i class="bi bi-info-circle"></i>
               </span>
             </span>
@@ -97,6 +97,32 @@
       </div>
 
       <!-- Action Buttons for Developers/Admins -->
+      <!-- NEW: Take/Assign Ticket (Developer can self-assign if not assigned) -->
+      <div v-if="canTakeTicket" class="action-card mt-3">
+        <div class="card-body">
+          <h4><i class="bi bi-hand-thumbs-up"></i> Take This Ticket</h4>
+          <p class="text-muted">Assign this ticket to yourself to work on it.</p>
+          
+          <button 
+            class="btn btn-success"
+            @click="takeTicket"
+            :disabled="resolvingTicket"
+          >
+            <span v-if="resolvingTicket">
+              <span class="spinner-border spinner-border-sm me-2"></span>
+              Assigning...
+            </span>
+            <span v-else>
+              <i class="bi bi-hand-thumbs-up-fill"></i> Take Ticket
+            </span>
+          </button>
+
+          <div v-if="resolveError" class="alert alert-danger mt-3">
+            <i class="bi bi-exclamation-circle"></i> {{ resolveError }}
+          </div>
+        </div>
+      </div>
+
       <!-- NEW: Request Resolution Approval (Developer) -->
       <div v-if="canRequestResolution" class="action-card mt-3">
         <div class="card-body">
@@ -151,6 +177,20 @@
             </div>
           </div>
 
+          <div class="mb-3">
+            <div class="form-check">
+              <input 
+                class="form-check-input" 
+                type="checkbox" 
+                v-model="closeTicketOnApproval" 
+                id="closeTicketCheckbox"
+              >
+              <label class="form-check-label" for="closeTicketCheckbox">
+                Close ticket after approval (recommended)
+              </label>
+            </div>
+          </div>
+
           <div class="d-flex gap-2">
             <button 
               class="btn btn-success"
@@ -162,7 +202,7 @@
                 Processing...
               </span>
               <span v-else>
-                <i class="bi bi-check-circle-fill"></i> Approve
+                <i class="bi bi-check-circle-fill"></i> Approve {{ closeTicketOnApproval ? '& Close' : '' }}
               </span>
             </button>
             <button 
@@ -189,12 +229,12 @@
           <div class="resolve-info mb-3">
             <div class="alert alert-success">
               <i class="bi bi-trophy-fill"></i>
-              <strong>You will earn {{ calculatePotentialScore() }} points</strong> for resolving this ticket!
+              <strong>Base reward: {{ calculatePotentialScore() }} points</strong> for resolving this ticket!
               <br>
               <small class="text-muted">
-                Based on {{ ticketData.priority?.toUpperCase() }} priority 
-                ({{ getPriorityPoints(ticketData.priority) }} base points)
-                × time multiplier
+                {{ ticketData.priority?.toUpperCase() }} priority = {{ getPriorityPoints(ticketData.priority) }} points
+                <br>
+                Bonus: +2 to +10 points if requester rates your solution (rating × 2)
               </small>
             </div>
           </div>
@@ -364,13 +404,6 @@
         </div>
       </div>
     </div>
-
-    <div v-else class="text-center my-5">
-      <div class="spinner-border text-primary" role="status">
-        <span class="visually-hidden">Loading...</span>
-      </div>
-      <p class="mt-3">Loading ticket details...</p>
-    </div>
   </div>
 </template>
 
@@ -403,6 +436,7 @@ const processingApproval = ref(false)
 const approvalError = ref(null)
 const showRejectModal = ref(false)
 const rejectionReason = ref('')
+const closeTicketOnApproval = ref(true) // Default to closing ticket on approval
 const closingTicket = ref(false)
 const closeError = ref(null)
 
@@ -448,21 +482,38 @@ const canEditTicket = computed(() => {
 
 const canRateTicket = computed(() => {
   if (!isAuthenticated.value || !ticketData.value) return false
+  console.log('canRateTicket check:', {
+    isAuthenticated: isAuthenticated.value,
+    hasTicketData: !!ticketData.value,
+    request_author_id: ticketData.value?.request_author_id,
+    currentUserId: currentUser.value?.id,
+    flag_status: ticketData.value?.flag_status,
+    solve_status: ticketData.value?.solve_status,
+    hasRating: !!ticketRating.value
+  })
   // User can rate if they are the author, ticket is closed and solved, and not yet rated
   return ticketData.value.request_author_id === currentUser.value?.id &&
          ticketData.value.flag_status === 'closed' &&
-         ticketData.value.solve_status === 'solved'
+         ticketData.value.solve_status === 'solved' &&
+         !ticketRating.value
 })
 
 const canRequestResolution = computed(() => {
   if (!isAuthenticated.value || !ticketData.value) return false
-  const userRole = currentUser.value?.role?.toLowerCase()
   
-  // Developers can request resolution approval for assigned open tickets
-  return userRole === 'developer' &&
-         ticketData.value.flag_status === 'open' &&
+  // All authenticated users (developer, moderator, admin) can request resolution approval for tickets assigned to them
+  return ticketData.value.flag_status === 'open' &&
          ticketData.value.solve_status === 'not_solved' &&
          ticketData.value.assigned_developer_id === currentUser.value?.id
+})
+
+const canTakeTicket = computed(() => {
+  if (!isAuthenticated.value || !ticketData.value) return false
+  
+  // All authenticated users can take unassigned open tickets
+  return ticketData.value.flag_status === 'open' &&
+         ticketData.value.solve_status === 'not_solved' &&
+         !ticketData.value.assigned_developer_id
 })
 
 const canApproveResolution = computed(() => {
@@ -543,42 +594,27 @@ const formatDate = (dateString) => {
 
 const getPriorityPoints = (priority) => {
   const points = {
-    'high': 100,
-    'HIGH': 100,
-    'medium': 50,
-    'MEDIUM': 50,
-    'low': 25,
-    'LOW': 25
+    'high': 10,
+    'HIGH': 10,
+    'medium': 5,
+    'MEDIUM': 5,
+    'low': 2,
+    'LOW': 2
   }
-  return points[priority] || 25
+  return points[priority] || 5
 }
 
 const calculatePotentialScore = () => {
   if (!ticketData.value) return 0
   
+  // Base points based on priority (matches backend calculation)
   const basePoints = getPriorityPoints(ticketData.value.priority)
   
-  // Calculate time multiplier based on current time
-  const openDate = new Date(ticketData.value.opening_date)
-  const deadlineDate = new Date(ticketData.value.deadline_date)
-  const now = new Date()
+  // Note: Actual points may be higher if the ticket requester rates the resolution
+  // Rating bonus = rating (1-5) × 2 = 2-10 additional points
+  // Maximum possible: basePoints + 10 (for 5-star rating)
   
-  const totalDays = Math.ceil((deadlineDate - openDate) / (1000 * 60 * 60 * 24))
-  const daysTaken = Math.ceil((now - openDate) / (1000 * 60 * 60 * 24))
-  
-  let timeMultiplier = 1.0
-  
-  if (daysTaken <= totalDays * 0.5) {
-    timeMultiplier = 1.5 // 50% bonus
-  } else if (daysTaken <= totalDays) {
-    timeMultiplier = 1.0 // No bonus/penalty
-  } else if (daysTaken <= totalDays * 1.5) {
-    timeMultiplier = 0.75 // 25% penalty
-  } else {
-    timeMultiplier = 0.5 // 50% penalty
-  }
-  
-  return Math.round(basePoints * timeMultiplier)
+  return basePoints
 }
 
 const handleTicketUpdated = async () => {
@@ -649,20 +685,46 @@ const closeTicket = async () => {
 const submitRating = async () => {
   if (selectedRating.value === 0) return
   
+  console.log('Submitting rating:', selectedRating.value, 'comment:', ratingComment.value)
   submittingRating.value = true
   try {
-    await ticketStore.submitTicketRating(props.ticketId, selectedRating.value, ratingComment.value)
-    alert('Thank you for your rating!')
-    ticketRating.value = {
+    const rating = await ticketStore.rateTicket(props.ticketId, {
       rating: selectedRating.value,
-      comment: ratingComment.value,
-      rated_at: new Date()
-    }
+      comment: ratingComment.value
+    })
+    console.log('Rating submitted successfully:', rating)
+    alert('Thank you for your rating!')
+    ticketRating.value = rating
+    selectedRating.value = 0
+    ratingComment.value = ''
   } catch (error) {
     console.error('Error submitting rating:', error)
-    alert('Failed to submit rating. Please try again.')
+    alert(error.response?.data?.message || 'Failed to submit rating. Please try again.')
   } finally {
     submittingRating.value = false
+  }
+}
+
+// NEW: Take/assign ticket to current user
+const takeTicket = async () => {
+  if (!confirm('Assign this ticket to yourself?')) {
+    return
+  }
+  
+  resolvingTicket.value = true
+  resolveError.value = null
+  
+  try {
+    await ticketStore.updateTicket(props.ticketId, {
+      assigned_developer_id: currentUser.value.id
+    })
+    alert('Ticket assigned to you! You can now work on it and request resolution approval when done.')
+    await fetchTicket(props.ticketId)
+  } catch (error) {
+    console.error('Error taking ticket:', error)
+    resolveError.value = error.response?.data?.error || 'Failed to assign ticket'
+  } finally {
+    resolvingTicket.value = false
   }
 }
 
@@ -689,7 +751,11 @@ const requestResolutionApproval = async () => {
 
 // NEW: Approve resolution (Moderator/Admin)
 const approveTicketResolution = async () => {
-  if (!confirm('Approve this resolution? Points will be awarded to the developer.')) {
+  const message = closeTicketOnApproval.value 
+    ? 'Approve this resolution and close the ticket? Points will be awarded to the developer.'
+    : 'Approve this resolution? Points will be awarded to the developer. The ticket will remain open.'
+  
+  if (!confirm(message)) {
     return
   }
   
@@ -697,8 +763,11 @@ const approveTicketResolution = async () => {
   approvalError.value = null
   
   try {
-    await approveResolution(props.ticketId)
-    alert('Resolution approved! Points have been awarded to the developer.')
+    await approveResolution(props.ticketId, closeTicketOnApproval.value)
+    const resultMessage = closeTicketOnApproval.value
+      ? 'Resolution approved and ticket closed! Points have been awarded to the developer.'
+      : 'Resolution approved! Points have been awarded to the developer. Ticket remains open.'
+    alert(resultMessage)
     await fetchTicket(props.ticketId)
   } catch (error) {
     console.error('Error approving resolution:', error)

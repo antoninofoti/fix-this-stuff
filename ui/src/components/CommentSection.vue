@@ -62,7 +62,12 @@
         </div>
         <div class="comment-content">
           <div class="comment-header-info">
-            <span class="comment-author">User #{{ comment.author_id }}</span>
+            <span class="comment-author">
+              <span v-if="comment.author">
+                {{ comment.author.name }} {{ comment.author.surname }} (@{{ comment.author.username || comment.author.email?.split('@')[0] }})
+              </span>
+              <span v-else>User #{{ comment.author_id }}</span>
+            </span>
             <span class="comment-date">
               <i class="bi bi-clock"></i> {{ formatDate(comment.creation_date) }}
             </span>
@@ -265,8 +270,11 @@ const formatDate = (dateString) => {
   const diffDays = Math.floor(diffMs / 86400000)
   
   if (diffMinutes < 1) return 'Now'
+  if (diffMinutes === 1) return '1 minute ago'
   if (diffMinutes < 60) return `${diffMinutes} minutes ago`
+  if (diffHours === 1) return '1 hour ago'
   if (diffHours < 24) return `${diffHours} hours ago`
+  if (diffDays === 1) return '1 day ago'
   if (diffDays < 7) return `${diffDays} days ago`
   
   return date.toLocaleDateString('en-US', {

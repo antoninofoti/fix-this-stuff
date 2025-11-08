@@ -20,4 +20,10 @@ export const getLeaderboard = async (limit = 10) => {
   return response.data;
 };
 
+// Search users
+export const searchUsers = async (query, limit = 20) => {
+  const response = await userApi.get(`/search?q=${encodeURIComponent(query)}&limit=${limit}`);
+  return response.data;
+};
+
 export default userApi;

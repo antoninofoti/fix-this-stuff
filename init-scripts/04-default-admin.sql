@@ -1,24 +1,31 @@
--- This script creates a default admin user during database initialization
+-- Create default admin user during database initialization
 
--- Create a default admin credential
-INSERT INTO credentials (username, password, role)
-SELECT 'admin', '$2b$10$qgolECo3lDkyyQsJqqbbpuKCKwPZmuvwTzJMnrAlGA5axiyCbVxYa', 'admin' -- Default password: admin123 (hashed with bcrypt)
-WHERE NOT EXISTS (
-    SELECT 1 FROM credentials WHERE username = 'admin'
-);
+-- First, create admin credential in authdb and store its ID
+\c authdb;
 
--- Add admin user to users table (if not already exists)
-INSERT INTO users (name, surname, email, credentials_id, role, rank)
-SELECT 
-    'System', 'Administrator', 'admin@fixthisstuff.com', 
-    (SELECT id FROM credentials WHERE username = 'admin'),
-    'admin', 100
-WHERE NOT EXISTS (
-    SELECT 1 FROM users WHERE email = 'admin@fixthisstuff.com'
-);
-
--- Log creation of admin user for verification
 DO $$
+DECLARE
+    admin_cred_id INTEGER;
 BEGIN
-    RAISE NOTICE 'Default admin user created or already exists';
+    -- Insert or get existing credential
+    INSERT INTO credentials (username, password, role)
+    VALUES ('admin@fixthisstuff.com', '$2b$10$frW98NM4KlSVIiSaTOsYP.NA9F77I/P355WyAx8djpigQsN1bnKd.', 'admin')
+    ON CONFLICT (username) DO NOTHING;
+    
+    -- Get the credential ID
+    SELECT id INTO admin_cred_id FROM credentials WHERE username = 'admin@fixthisstuff.com';
+    
+    -- Store it in a temporary table that we can access from userdb
+    CREATE TEMP TABLE IF NOT EXISTS temp_admin_id (cred_id INTEGER);
+    TRUNCATE temp_admin_id;
+    INSERT INTO temp_admin_id VALUES (admin_cred_id);
+    
+    RAISE NOTICE 'Admin credential ID: %', admin_cred_id;
 END $$;
+
+-- Now create admin user in userdb using the fixed ID 1
+\c userdb;
+
+INSERT INTO users (name, surname, email, credentials_id, role, rank)
+VALUES ('System', 'Administrator', 'admin@fixthisstuff.com', 1, 'admin', 100)
+ON CONFLICT (email) DO NOTHING;

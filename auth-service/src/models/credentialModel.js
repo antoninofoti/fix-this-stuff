@@ -46,7 +46,6 @@ const CredentialModel = {
   },
 
   /**
-   * Create a new credential
    * @param {string} username - The username (email)
    * @param {string} hashedPassword - The hashed password
    * @returns {Promise<Object>} The created credential (id, username, registration_date)

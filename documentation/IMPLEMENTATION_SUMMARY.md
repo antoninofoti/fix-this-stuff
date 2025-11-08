@@ -11,7 +11,6 @@ Implement a comprehensive system where developers can resolve tickets and earn p
 **Ticket Table Modifications:**
 - `resolved_by` (INTEGER): ID of the developer who resolved the ticket
 - `resolved_at` (TIMESTAMP): Timestamp when approval was requested
-- `approved_by` (INTEGER): ID of the moderator/administrator who approved
 - `approval_date` (TIMESTAMP): Date of approval
 - `rejection_reason` (TEXT): Reason for rejection (if applicable)
 - Updated `solve_status` constraint to include `'pending_approval'`
@@ -31,7 +30,6 @@ CREATE TABLE developer_points (
 
 **Performance Indexes:**
 - Index on `ticket.resolved_by`
-- Index on `ticket.approved_by`
 - Index on `ticket.solve_status`
 - Index on `developer_points.total_points DESC` (for leaderboard queries)
 

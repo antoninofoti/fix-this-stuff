@@ -318,9 +318,424 @@ This architectural decision enables:
 
 ## Git Workflow
 
-1. Create feature branches from `main`
-2. Use conventional commits: `feat:`, `fix:`, `docs:`, `refactor:`
-3. Keep commits focused and atomic
-4. Write descriptive commit messages (max 50 characters for title)
-5. Test before committing
-6. Create pull requests for review
+### Branching Strategy
+
+1. **main**: Production-ready code
+2. **develop**: Integration branch for features
+3. **feature/***: New features (e.g., `feature/user-search`)
+4. **bugfix/***: Bug fixes (e.g., `bugfix/login-error`)
+5. **hotfix/***: Urgent production fixes
+
+### Commit Conventions
+
+Use conventional commits format:
+```
+<type>(<scope>): <subject>
+
+<body>
+
+<footer>
+```
+
+**Types:**
+- `feat`: New feature
+- `fix`: Bug fix
+- `docs`: Documentation changes
+- `style`: Code style changes (formatting, semicolons)
+- `refactor`: Code refactoring
+- `test`: Adding or updating tests
+- `chore`: Maintenance tasks (dependencies, build)
+
+**Examples:**
+```bash
+git commit -m "feat(tickets): add search endpoint for tickets"
+git commit -m "fix(auth): resolve JWT expiration issue"
+git commit -m "docs(api): update authentication endpoints"
+```
+
+### Development Workflow
+
+1. Create feature branch from `main` or `develop`
+2. Make changes and test locally
+3. Commit with conventional commit messages
+4. Push to remote repository
+5. Create pull request with description
+6. Address review comments
+7. Merge after approval
+
+## Project Structure
+
+### Backend Services Structure
+
+Each Node.js microservice follows this structure:
+
+```
+service-name/
+├── src/
+│   ├── server.js           # Entry point
+│   ├── config/
+│   │   └── db.js          # Database configuration
+│   ├── controllers/        # Request handlers
+│   ├── models/            # Database models
+│   ├── routes/            # API routes
+│   ├── middleware/        # Custom middleware
+│   └── services/          # Business logic
+├── Dockerfile
+├── package.json
+└── .env.example
+```
+
+### Frontend Structure
+
+```
+ui/
+├── public/                # Static assets
+├── src/
+│   ├── main.js           # Application entry
+│   ├── App.vue           # Root component
+│   ├── api/              # API client modules
+│   ├── components/       # Reusable components
+│   ├── views/            # Page components
+│   ├── router/           # Vue Router config
+│   ├── store/            # Pinia stores
+│   └── assets/           # Images, styles
+├── index.html
+├── vite.config.js
+├── package.json
+└── nginx.conf            # Production server config
+```
+
+### Database Initialization Scripts
+
+```
+init-scripts/
+├── 00-init-multi-db.sh              # Create databases
+├── 01-auth-schema.sql               # Auth service schema
+├── 02-user-schema.sql               # User service schema
+├── 03-ticket-schema.sql             # Ticket service schema
+├── 04-default-admin.sql             # Default admin user
+└── 05-ticket-updates.sql            # Resolution workflow
+```
+
+Scripts execute in alphanumeric order during PostgreSQL initialization.
+
+## Development Best Practices
+
+### Database Migrations
+
+When modifying database schema:
+
+1. **Create Migration Script**: Add new `.sql` file in `init-scripts/` with sequential number
+2. **Test Locally**: Reset database and verify migration
+3. **Document Changes**: Update ARCHITECTURE.md with schema changes
+4. **Backup Production**: Always backup before applying migrations
+
+**Example Migration:**
+```bash
+# Create new migration
+cat > init-scripts/06-add-ticket-rating.sql << 'EOF'
+ALTER TABLE ticket ADD COLUMN rating INTEGER;
+ALTER TABLE ticket ADD CONSTRAINT rating_check CHECK (rating >= 1 AND rating <= 5);
+EOF
+
+# Test migration
+docker compose down -v
+docker compose up -d
+```
+
+### API Development
+
+When adding new endpoints:
+
+1. **Design First**: Define request/response format
+2. **Update Routes**: Add route in appropriate service
+3. **Implement Controller**: Add business logic
+4. **Add Validation**: Validate input data
+5. **Error Handling**: Handle edge cases gracefully
+6. **Update Gateway**: Add route in API Gateway if needed
+7. **Document**: Update API.md with new endpoint
+8. **Test**: Write integration tests
+
+### Frontend Component Development
+
+When creating new components:
+
+1. **Single Responsibility**: Each component should do one thing well
+2. **Props and Events**: Use props for input, emit events for output
+3. **Composition API**: Use `<script setup>` syntax
+4. **Reactive Data**: Use `ref()` for primitives, `reactive()` for objects
+5. **Computed Properties**: For derived state
+6. **Lifecycle Hooks**: Use `onMounted()`, `onUnmounted()` when needed
+7. **Error Handling**: Display user-friendly error messages
+
+**Example Component:**
+```vue
+<script setup>
+import { ref, computed, onMounted } from 'vue'
+import { useAuthStore } from '../store/auth'
+
+const props = defineProps({
+  ticketId: {
+    type: Number,
+    required: true
+  }
+})
+
+const emit = defineEmits(['ticket-updated'])
+
+const authStore = useAuthStore()
+const ticket = ref(null)
+const loading = ref(false)
+
+const canEdit = computed(() => {
+  return ticket.value?.created_by === authStore.user?.id
+})
+
+onMounted(async () => {
+  await fetchTicket()
+})
+
+async function fetchTicket() {
+  loading.value = true
+  try {
+    // Fetch ticket logic
+  } catch (error) {
+    console.error('Failed to fetch ticket:', error)
+  } finally {
+    loading.value = false
+  }
+}
+</script>
+```
+
+### Security Best Practices
+
+1. **Never Commit Secrets**: Use `.env` files (add to `.gitignore`)
+2. **Validate Input**: Always validate and sanitize user input
+3. **Use Parameterized Queries**: Prevent SQL injection
+4. **Hash Passwords**: Always use bcrypt for password storage
+5. **HTTPS in Production**: Use SSL/TLS certificates
+6. **JWT Expiration**: Set reasonable token expiration times
+7. **CORS Configuration**: Only allow trusted origins
+8. **Rate Limiting**: Implement rate limiting on public endpoints
+
+### Performance Best Practices
+
+1. **Database Indexes**: Index frequently queried columns
+2. **Connection Pooling**: Reuse database connections
+3. **Async Processing**: Use RabbitMQ for long-running tasks
+4. **Caching**: Cache static content and frequently accessed data
+5. **Pagination**: Limit query results with offset/limit
+6. **Lazy Loading**: Load data only when needed
+7. **Bundle Optimization**: Use Vite code splitting for frontend
+
+### Testing Best Practices
+
+1. **Unit Tests**: Test individual functions and methods
+2. **Integration Tests**: Test API endpoints end-to-end
+3. **Component Tests**: Test Vue components in isolation
+4. **E2E Tests**: Test complete user workflows
+5. **Test Coverage**: Aim for >80% code coverage
+6. **Mock External Services**: Use mocks for databases and APIs in tests
+7. **Test Error Cases**: Test both success and failure scenarios
+
+## Debugging Techniques
+
+### Backend Debugging
+
+#### Enable Debug Logging
+
+**Node.js Services:**
+```javascript
+// Add to server.js
+if (process.env.NODE_ENV === 'development') {
+  app.use((req, res, next) => {
+    console.log(`${req.method} ${req.path}`, req.body)
+    next()
+  })
+}
+```
+
+**API Gateway:**
+```properties
+# application.properties
+logging.level.com.example=DEBUG
+logging.level.org.springframework.web=DEBUG
+```
+
+#### Attach Debugger
+
+**Node.js with Chrome DevTools:**
+```bash
+# Add --inspect flag
+node --inspect src/server.js
+
+# Open chrome://inspect in Chrome
+# Click "inspect" on your service
+```
+
+**VS Code Launch Configuration:**
+```json
+{
+  "type": "node",
+  "request": "attach",
+  "name": "Attach to Docker",
+  "remoteRoot": "/app",
+  "localRoot": "${workspaceFolder}/auth-service",
+  "port": 9229
+}
+```
+
+### Frontend Debugging
+
+#### Browser DevTools
+
+1. **Console**: Check for JavaScript errors and log output
+2. **Network Tab**: Inspect API requests and responses
+3. **Vue DevTools**: Install extension for component inspection
+4. **Application Tab**: Check localStorage for JWT tokens
+
+#### Vue DevTools
+
+Install Chrome extension:
+- Inspect component hierarchy
+- View component state and props
+- Track Pinia store state
+- Monitor events
+
+#### Debug API Calls
+
+```javascript
+// Add interceptor in api client
+axios.interceptors.request.use(config => {
+  console.log('Request:', config.method, config.url, config.data)
+  return config
+})
+
+axios.interceptors.response.use(
+  response => {
+    console.log('Response:', response.status, response.data)
+    return response
+  },
+  error => {
+    console.error('Error:', error.response?.status, error.response?.data)
+    return Promise.reject(error)
+  }
+)
+```
+
+### Database Debugging
+
+#### Query Logging
+
+Enable query logging in PostgreSQL:
+```bash
+# Edit postgresql.conf or set via environment
+docker exec -it postgres psql -U admin -d ticketdb -c \
+  "ALTER DATABASE ticketdb SET log_statement = 'all';"
+
+# View logs
+docker compose logs postgres | grep "LOG:  statement"
+```
+
+#### Inspect Tables
+
+```bash
+# Connect to database
+docker exec -it postgres psql -U admin -d ticketdb
+
+# Common commands
+\dt                          # List tables
+\d ticket                    # Describe ticket table
+SELECT * FROM ticket LIMIT 5; # Query data
+\x                          # Toggle expanded display
+\q                          # Quit
+```
+
+#### Analyze Query Performance
+
+```sql
+-- Enable timing
+\timing
+
+-- Explain query plan
+EXPLAIN ANALYZE SELECT * FROM ticket WHERE priority = 'high';
+
+-- Check slow queries
+SELECT query, calls, total_time, mean_time 
+FROM pg_stat_statements 
+ORDER BY mean_time DESC 
+LIMIT 10;
+```
+
+## Common Development Tasks
+
+### Adding a New Microservice
+
+1. Create service directory with standard structure
+2. Implement Express server with routes and controllers
+3. Add database configuration and models
+4. Create Dockerfile for containerization
+5. Add service to `docker-compose.yml`
+6. Update API Gateway routing (if needed)
+7. Document endpoints in API.md
+8. Update ARCHITECTURE.md with service description
+
+### Adding a New Database Table
+
+1. Create migration script in `init-scripts/`
+2. Define table schema with constraints
+3. Add indexes for performance
+4. Create model in appropriate service
+5. Implement CRUD operations
+6. Update ARCHITECTURE.md with schema
+7. Test migration locally
+
+### Adding a New Frontend Route
+
+1. Create view component in `src/views/`
+2. Add route to `src/router/index.js`
+3. Add navigation link in Navbar (if needed)
+4. Implement navigation guards for authentication/authorization
+5. Test route navigation and permissions
+6. Update documentation
+
+### Updating Dependencies
+
+```bash
+# Backend (Node.js)
+cd auth-service
+npm outdated              # Check for updates
+npm update                # Update minor/patch versions
+npm install package@latest # Update specific package
+
+# Frontend
+cd ui
+npm outdated
+npm update
+npm install package@latest
+
+# Rebuild containers
+docker compose up -d --build
+```
+
+## Resources
+
+### Documentation
+- [Vue.js 3 Documentation](https://vuejs.org/)
+- [Spring Boot Documentation](https://spring.io/projects/spring-boot)
+- [Express.js Guide](https://expressjs.com/)
+- [PostgreSQL Documentation](https://www.postgresql.org/docs/)
+- [RabbitMQ Tutorials](https://www.rabbitmq.com/getstarted.html)
+
+### Tools
+- [Postman](https://www.postman.com/) - API testing
+- [pgAdmin](https://www.pgadmin.org/) - PostgreSQL GUI
+- [Vue DevTools](https://devtools.vuejs.org/) - Vue debugging
+- [Docker Desktop](https://www.docker.com/products/docker-desktop) - Container management
+
+### Code Quality
+- [ESLint](https://eslint.org/) - JavaScript linting
+- [Prettier](https://prettier.io/) - Code formatting
+- [SonarQube](https://www.sonarqube.org/) - Code quality analysis
+

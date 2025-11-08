@@ -101,6 +101,59 @@ GET /api/tickets
 Authorization: Bearer <token>
 ```
 
+**Response:**
+```json
+{
+  "tickets": [
+    {
+      "id": 1,
+      "title": "Cannot connect to database",
+      "priority": "high",
+      "status": "open",
+      "created_at": "2025-11-01T10:00:00.000Z"
+    }
+  ]
+}
+```
+
+### Search Tickets
+Search for tickets by ID, title, description, category, status, or priority.
+
+```bash
+GET /api/tickets/search?query=database&limit=50
+Authorization: Bearer <token>
+```
+
+**Query Parameters:**
+- `query` (required): Search term (minimum 2 characters)
+- `limit` (optional, default: 50): Maximum number of results to return
+
+**Response:**
+```json
+{
+  "tickets": [
+    {
+      "id": 5,
+      "title": "Cannot connect to database",
+      "description": "Getting connection timeout errors",
+      "category": 1,
+      "priority": "high",
+      "status": "open",
+      "created_by": 4,
+      "assigned_to": null,
+      "created_at": "2025-11-01T10:34:41.000Z"
+    }
+  ],
+  "count": 1
+}
+```
+
+**Search Behavior:**
+- Case-insensitive partial matching
+- Searches across: id, title, description, category, status, priority
+- Returns empty array if no matches found
+- Maximum 50 results by default (configurable via `limit` parameter)
+
 ### Get Ticket Details
 ```bash
 GET /api/tickets/:ticketId
@@ -133,6 +186,62 @@ Authorization: Bearer <token>
 GET /api/users
 Authorization: Bearer <token>
 ```
+
+**Response:**
+```json
+{
+  "users": [
+    {
+      "id": 1,
+      "name": "John",
+      "surname": "Doe",
+      "email": "john.doe@example.com",
+      "role": "developer",
+      "rank": "Bronze"
+    }
+  ]
+}
+```
+
+### Search Users (Admin/Moderator only)
+Search for users by name, surname, or email.
+
+```bash
+GET /api/users/search?query=john&limit=50
+Authorization: Bearer <token>
+```
+
+**Query Parameters:**
+- `query` or `q` (required): Search term (minimum 2 characters)
+- `limit` (optional, default: 50): Maximum number of results to return
+
+**Authentication:** Required (Admin or Moderator role)
+
+**Response:**
+```json
+{
+  "users": [
+    {
+      "id": 1,
+      "name": "John",
+      "surname": "Doe",
+      "email": "john.doe@example.com",
+      "role": "developer",
+      "rank": "Bronze",
+      "points": 45,
+      "created_at": "2025-10-15T09:00:00.000Z"
+    }
+  ],
+  "count": 1
+}
+```
+
+**Search Behavior:**
+- Case-insensitive partial matching
+- Searches across: name, surname, email
+- Requires Admin or Moderator role
+- Returns empty array if no matches found
+- Maximum 50 results by default (configurable via `limit` parameter)
 
 ### Get User Details
 ```bash

@@ -21,6 +21,9 @@ router.patch('/internal/:userId/score', userController.updateUserScore);
 // Get leaderboard (public endpoint - no authentication required)
 router.get('/leaderboard', userController.getLeaderboard);
 
+// Search users (authenticated users can search)
+router.get('/search', authenticateRequest, userController.searchUsers);
+
 // Get all users (moderator or admin)
 router.get('/', authenticateRequest, authorizeModerator, userController.getAllUsers);
 
