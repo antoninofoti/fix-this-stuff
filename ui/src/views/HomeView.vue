@@ -104,29 +104,12 @@
         </button>
       </div>
 
-      <div v-else class="tickets-grid">
-        <div 
+      <div v-else class="tickets-grid-modern">
+        <TicketCard 
           v-for="ticket in recentUserTickets" 
           :key="ticket.id"
-          class="ticket-card"
-          @click="goToTicket(ticket.id)"
-        >
-          <div class="ticket-header">
-            <h4>#{{ ticket.id }} - {{ ticket.title }}</h4>
-            <span :class="['priority-badge', getPriorityClass(ticket.priority)]">
-              {{ ticket.priority }}
-            </span>
-          </div>
-          <p class="ticket-description">{{ truncateText(ticket.description, 100) }}</p>
-          <div class="ticket-footer">
-            <span class="category-tag">
-              <i class="bi bi-tag-fill"></i> {{ ticket.category }}
-            </span>
-            <span class="ticket-date">
-              <i class="bi bi-calendar"></i> {{ formatDate(ticket.created_at) }}
-            </span>
-          </div>
-        </div>
+          :ticketData="ticket"
+        />
       </div>
     </div>
 
@@ -151,33 +134,12 @@
         <p>Be the first to create a ticket!</p>
       </div>
 
-      <div v-else class="tickets-grid">
-        <div 
+      <div v-else class="tickets-grid-modern">
+        <TicketCard 
           v-for="ticket in latestAllTickets" 
           :key="ticket.id"
-          class="ticket-card"
-          :class="{ 'guest-mode': !isAuthenticated }"
-          @click="goToTicket(ticket.id)"
-        >
-          <div class="ticket-header">
-            <h4>#{{ ticket.id }} - {{ ticket.title }}</h4>
-            <span :class="['priority-badge', getPriorityClass(ticket.priority)]">
-              {{ ticket.priority }}
-            </span>
-          </div>
-          <p class="ticket-description">{{ truncateText(ticket.description, 100) }}</p>
-          <div class="ticket-footer">
-            <span class="category-tag">
-              <i class="bi bi-tag-fill"></i> {{ ticket.category }}
-            </span>
-            <span class="ticket-author">
-              <i class="bi bi-person"></i> {{ ticket.created_by }}
-            </span>
-            <span class="ticket-date">
-              <i class="bi bi-calendar"></i> {{ formatDate(ticket.created_at) }}
-            </span>
-          </div>
-        </div>
+          :ticketData="ticket"
+        />
       </div>
     </div>
   </div>
@@ -188,6 +150,7 @@
   import { useAuthStore } from '../store/auth'
   import { useTicketStore } from '../store/ticket'
   import { useRouter } from 'vue-router'
+  import TicketCard from '../components/TicketCard.vue'
 
   const authStore = useAuthStore()
   const ticketStore = useTicketStore()
@@ -580,6 +543,12 @@
   gap: 1.5rem;
 }
 
+.tickets-grid-modern {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+  gap: 1.5rem;
+}
+
 .ticket-card {
   background: white;
   border-radius: 12px;
@@ -721,6 +690,10 @@
   }
 
   .tickets-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .tickets-grid-modern {
     grid-template-columns: 1fr;
   }
 
