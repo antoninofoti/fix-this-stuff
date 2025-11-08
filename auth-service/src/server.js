@@ -1,5 +1,5 @@
 const express = require('express');
-const cors = require('cors');
+// const cors = require('cors');
 require('dotenv').config();
 
 // Route imports
@@ -9,17 +9,17 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 // CORS configuration
-const corsOptions = {
-  origin: '*', // Allow all origins (API Gateway will handle the filtering)
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Internal-Auth', 'x-user', 'x-role', 'x-username'],
-  exposedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true,
-  maxAge: 3600
-};
+// const corsOptions = {
+  // origin: '*', // Allow all origins (API Gateway will handle the filtering)
+  // methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  // allowedHeaders: ['Content-Type', 'Authorization', 'X-Internal-Auth', 'x-user', 'x-role', 'x-username'],
+  // exposedHeaders: ['Content-Type', 'Authorization'],
+  // credentials: true,
+  // maxAge: 3600
+// };
 
 // Middleware
-app.use(cors(corsOptions));
+// app.use(cors(corsOptions));
 app.use(express.json());
 
 // Request logging
