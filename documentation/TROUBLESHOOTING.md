@@ -362,6 +362,167 @@ df -h
 docker system prune -a
 ```
 
+## Advanced Debugging
+
+### Debugging Inside Containers
+
+Execute commands inside running containers for in-depth troubleshooting:
+
+```bash
+# Access bash shell
+docker exec -it auth-service bash
+docker exec -it api-gateway bash
+
+# Check Node.js process
+docker exec -it auth-service ps aux | grep node
+
+# View environment variables
+docker exec -it auth-service env | grep DB_
+
+# Test internal network connectivity
+docker exec -it api-gateway ping auth-service
+docker exec -it api-gateway curl http://user-service:3002/health
+```
+
+### Network Debugging
+
+Inspect Docker networks and service connectivity:
+
+```bash
+# List networks
+docker network ls
+
+# Inspect fts-network
+docker network inspect fix-this-stuff_fts-network
+
+# Find service IPs
+docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' auth-service
+
+# Test connectivity between services
+docker exec -it api-gateway ping user-service
+docker exec -it ticket-service curl http://auth-service:3001/health
+```
+
+### Database Debugging
+
+Access PostgreSQL directly for detailed database inspection:
+
+```bash
+# Connect to database
+docker exec -it postgres psql -U admin -d authdb
+
+# Useful SQL commands
+\l              # List databases
+\c userdb       # Connect to database
+\dt             # List tables
+\d users        # Describe table
+SELECT * FROM users;  # Query data
+
+# Check user roles
+SELECT id, email, role FROM users;
+
+# Check credentials
+SELECT * FROM credentials WHERE email = 'test@example.com';
+
+# Check ticket data
+\c ticketdb
+SELECT id, title, flag_status, solve_status FROM ticket LIMIT 10;
+```
+
+### API Gateway Debugging
+
+Enable debug logging in API Gateway:
+
+```bash
+# Edit application.properties or application-docker.properties
+logging.level.com.example=DEBUG
+logging.level.org.springframework.web=DEBUG
+
+# Rebuild and restart
+docker compose up -d --build api-gateway
+docker compose logs -f api-gateway
+```
+
+### Frontend Debugging
+
+Access frontend build logs and nginx configuration:
+
+```bash
+# View build output
+docker compose logs ui
+
+# Check nginx configuration
+docker exec -it ui-frontend cat /etc/nginx/nginx.conf
+
+# View nginx access logs
+docker exec -it ui-frontend tail -f /var/log/nginx/access.log
+docker exec -it ui-frontend tail -f /var/log/nginx/error.log
+```
+
+For local development debugging:
+```bash
+cd ui
+npm run dev
+# Open browser console (F12) to see network requests and errors
+```
+
+### Performance Debugging
+
+Monitor container resource usage and service performance:
+
+```bash
+# Real-time stats
+docker stats
+
+# Specific containers
+docker stats auth-service user-service api-gateway
+
+# Test endpoint performance
+time curl -X GET http://localhost:8081/api/tickets \
+  -H "Authorization: Bearer $TOKEN"
+
+# Use Apache Bench for load testing
+ab -n 100 -c 10 http://localhost:8081/api/tickets
+```
+
+### Vite Environment Variables Not Working
+
+**Symptoms**: Frontend makes requests to wrong URLs, variables appear as `undefined`
+
+**Cause**: Environment variables not set at build time, or using runtime environment instead of build args
+
+**Solution**:
+
+1. Verify `docker-compose.yml` uses `build.args` for ui service:
+```yaml
+ui:
+  build:
+    context: ./ui
+    args:
+      VITE_AUTH_API_URL: http://localhost:8081/api/auth
+      VITE_USER_API_URL: http://localhost:8081/api/users
+      # ... other VITE_* variables
+```
+
+2. Ensure `ui/Dockerfile` declares ARGs and ENVs:
+```dockerfile
+ARG VITE_AUTH_API_URL
+ENV VITE_AUTH_API_URL=$VITE_AUTH_API_URL
+```
+
+3. Rebuild frontend:
+```bash
+docker compose up -d --build ui
+```
+
+4. For local development, create `.env.local`:
+```bash
+cd ui
+echo "VITE_AUTH_API_URL=http://localhost:8081/api/auth" > .env.local
+```
+
+**Important**: Vite requires variables at build time, not runtime. Always use `build.args` in docker-compose.yml, not `environment`.
+
 ## Prevention Best Practices
 
 ### Regular Maintenance
