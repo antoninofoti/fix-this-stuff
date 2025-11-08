@@ -16,19 +16,19 @@ ticketApi.interceptors.request.use((config) => {
 
 // Resolution workflow methods
 export const requestResolution = (ticketId) => {
-  return ticketApi.post(`/tickets/${ticketId}/request-resolution`);
+  return ticketApi.post(`/${ticketId}/request-resolution`);
 };
 
 export const approveResolution = (ticketId) => {
-  return ticketApi.post(`/tickets/${ticketId}/approve-resolution`);
+  return ticketApi.post(`/${ticketId}/approve-resolution`);
 };
 
 export const rejectResolution = (ticketId, reason) => {
-  return ticketApi.post(`/tickets/${ticketId}/reject-resolution`, { reason });
+  return ticketApi.post(`/${ticketId}/reject-resolution`, { reason });
 };
 
 export const getPendingApprovalTickets = () => {
-  return ticketApi.get('/tickets/pending-approval');
+  return ticketApi.get('/admin/pending-approval');
 };
 
 export const getLeaderboard = (limit = 10) => {

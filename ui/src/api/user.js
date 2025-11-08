@@ -16,7 +16,7 @@ userApi.interceptors.request.use((config) => {
 
 // Get leaderboard
 export const getLeaderboard = async (limit = 10) => {
-  const response = await userApi.get(`/users/leaderboard?limit=${limit}`);
+  const response = await userApi.get(`/leaderboard?limit=${limit}`);
   return response.data;
 };
 

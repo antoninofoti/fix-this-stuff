@@ -415,14 +415,17 @@ const props = defineProps({
 
 const fetchTicket = async (id) => {
   try {
+    console.log('TicketView: Fetching ticket', id)
     await ticketStore.fetchTicketByID(id)
+    console.log('TicketView: ticketStore.currentTicket =', ticketStore.currentTicket)
+    console.log('TicketView: ticketData.value =', ticketData.value)
     // Fetch rating if ticket is closed and solved
     if (ticketData.value?.flag_status === 'closed' && ticketData.value?.solve_status === 'solved') {
       const rating = await ticketStore.fetchTicketRating(id)
       ticketRating.value = rating
     }
   } catch (error) {
-    console.error(error)
+    console.error('TicketView: Error fetching ticket', error)
   }
 }
 
