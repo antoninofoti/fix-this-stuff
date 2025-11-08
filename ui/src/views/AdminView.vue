@@ -333,9 +333,23 @@ import { useAuthStore } from '../store/auth'
 import userApi from '../api/user'
 import ticketApi from '../api/ticket'
 import roleApi from '../api/role'
+import axios from 'axios'
 
 const router = useRouter()
 const authStore = useAuthStore()
+
+// Create a separate API instance for moderators endpoint
+const moderatorApi = axios.create({
+  baseURL: import.meta.env.VITE_API_GATEWAY_URL || 'http://localhost:8081/api',
+  headers: { 'Content-Type': 'application/json' }
+})
+
+moderatorApi.interceptors.request.use((config) => {
+  if (authStore.token) {
+    config.headers.Authorization = `Bearer ${authStore.token}`
+  }
+  return config
+}, (error) => Promise.reject(error))
 
 // Auth checks
 const isAdmin = computed(() => authStore.getRole?.toUpperCase() === 'ADMIN')
@@ -423,8 +437,7 @@ const fetchModerators = async () => {
   
   loadingModerators.value = true
   try {
-    // This endpoint might need to be created
-    const response = await userApi.get('/moderators')
+    const response = await moderatorApi.get('/moderators')
     moderators.value = response.data.moderators || []
     stats.value.totalModerators = moderators.value.length
   } catch (error) {

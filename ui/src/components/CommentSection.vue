@@ -62,7 +62,12 @@
         </div>
         <div class="comment-content">
           <div class="comment-header-info">
-            <span class="comment-author">User #{{ comment.author_id }}</span>
+            <span class="comment-author">
+              <span v-if="comment.author">
+                {{ comment.author.name }} {{ comment.author.surname }} (@{{ comment.author.username || comment.author.email?.split('@')[0] }})
+              </span>
+              <span v-else>User #{{ comment.author_id }}</span>
+            </span>
             <span class="comment-date">
               <i class="bi bi-clock"></i> {{ formatDate(comment.creation_date) }}
             </span>
@@ -154,10 +159,14 @@ const fetchComments = async () => {
   loading.value = true
   try {
     const token = authStore.getToken
+    console.log('Fetching comments with token:', token ? 'Token present' : 'No token')
     const response = await commentApi.getCommentsByTicket(props.ticketId, token)
     comments.value = response.data
+    console.log('Successfully fetched', comments.value.length, 'comments')
   } catch (error) {
     console.error('Error loading comments:', error)
+    console.error('Error response:', error.response?.data)
+    console.error('Error status:', error.response?.status)
   } finally {
     loading.value = false
   }
@@ -169,6 +178,16 @@ const submitComment = async () => {
   isSubmitting.value = true
   try {
     const token = authStore.getToken
+    console.log('Submitting comment with token:', token ? 'Token present' : 'No token')
+    console.log('User authenticated:', isAuthenticated.value)
+    console.log('User ID:', currentUserId.value)
+    
+    if (!token) {
+      alert('You are not logged in. Please log in first.')
+      isSubmitting.value = false
+      return
+    }
+    
     await commentApi.createComment(props.ticketId, newCommentText.value, token)
     newCommentText.value = ''
     
@@ -178,7 +197,16 @@ const submitComment = async () => {
     }, 1000)
   } catch (error) {
     console.error('Error submitting comment:', error)
-    alert('Error submitting comment. Please try again.')
+    console.error('Error response:', error.response?.data)
+    console.error('Error status:', error.response?.status)
+    
+    if (error.response?.status === 401) {
+      alert('Authentication failed. Your session may have expired. Please log in again.')
+      // Optionally redirect to login
+      router.push('/login')
+    } else {
+      alert('Error submitting comment. Please try again.')
+    }
   } finally {
     isSubmitting.value = false
   }
@@ -242,8 +270,11 @@ const formatDate = (dateString) => {
   const diffDays = Math.floor(diffMs / 86400000)
   
   if (diffMinutes < 1) return 'Now'
+  if (diffMinutes === 1) return '1 minute ago'
   if (diffMinutes < 60) return `${diffMinutes} minutes ago`
+  if (diffHours === 1) return '1 hour ago'
   if (diffHours < 24) return `${diffHours} hours ago`
+  if (diffDays === 1) return '1 day ago'
   if (diffDays < 7) return `${diffDays} days ago`
   
   return date.toLocaleDateString('en-US', {

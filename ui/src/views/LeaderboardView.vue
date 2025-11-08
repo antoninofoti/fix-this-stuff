@@ -86,10 +86,11 @@
       <div class="info-box">
         <h3>💡 How does scoring work?</h3>
         <ul>
-          <li>Resolve tickets to earn points</li>
-          <li>Receive positive ratings from requesters</li>
-          <li>The more tickets you successfully resolve, the more points you accumulate</li>
-          <li>Ratings from 1 to 5 stars contribute to your score</li>
+          <li>All users (Developers, Moderators, and Admins) can resolve tickets and earn points</li>
+          <li>Assign yourself to a ticket and submit a resolution for approval</li>
+          <li>Another moderator or admin must approve your resolution to award points</li>
+          <li>You cannot approve tickets that you resolved yourself</li>
+          <li>Points are based on ticket priority and user ratings (1-5 stars)</li>
         </ul>
       </div>
     </div>

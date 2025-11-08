@@ -51,9 +51,13 @@ export const useTicketStore = defineStore('ticket', {
       this.loading = true;
       this.error = null;
       try {
+        console.log('Store: Fetching ticket', ticketId)
         const response = await ticketApi.get(`/${ticketId}`);
+        console.log('Store: API response =', response.data)
         this.currentTicket = response.data.ticket || response.data;
+        console.log('Store: currentTicket set to', this.currentTicket)
       } catch (error) {
+        console.error('Store: Error fetching ticket', error)
         this.error = error.response?.data?.message || error.message || 'Failed to fetch ticket.';
         console.error('Error fetching ticket:', error);
         
@@ -61,6 +65,7 @@ export const useTicketStore = defineStore('ticket', {
         const localTicket = this.tickets.find(t => t.id == ticketId);
         if (localTicket) {
           this.currentTicket = localTicket;
+          console.log('Store: Using local ticket', localTicket)
         }
       } finally {
         this.loading = false;

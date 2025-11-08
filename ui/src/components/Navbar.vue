@@ -22,6 +22,11 @@
             </a>
           </li>
           <li v-if="isAuthenticated && isAdminOrModerator" class="nav-item">
+            <a class="nav-link pending-link" @click="router.push('/pending-approvals')" href="">
+              <i class="bi bi-clock-history"></i> Pending Approvals
+            </a>
+          </li>
+          <li v-if="isAuthenticated && isAdminOrModerator" class="nav-item">
             <a class="nav-link admin-link" @click="router.push('/admin')" href="">
               <i class="bi bi-shield-lock"></i> Admin
             </a>
@@ -114,14 +119,20 @@
                 </div>
                 <a 
                   v-for="user in searchResults.users.slice(0, 3)" 
-                  :key="user"
+                  :key="user.id"
                   href="#"
                   class="search-result-item"
-                  @mousedown.prevent="searchByUser(user)"
+                  @mousedown.prevent="searchByUser(user.email)"
                 >
                   <div class="search-result-content">
                     <div class="search-result-title">
-                      <i class="bi bi-person-circle"></i> {{ user }}
+                      <i class="bi bi-person-circle"></i> {{ user.name }} {{ user.surname }}
+                    </div>
+                    <div class="search-result-meta">
+                      <span class="search-result-email">{{ user.email }}</span>
+                      <span :class="['badge', 'badge-sm', getRoleBadgeClass(user.role)]">
+                        {{ user.role }}
+                      </span>
                     </div>
                   </div>
                 </a>
@@ -142,11 +153,11 @@
 <script setup>
   import { computed, ref, watch } from 'vue'
   import { useAuthStore } from '../store/auth'
-  import { useTicketStore } from '../store/ticket'
   import { useRouter } from 'vue-router'
+  import { searchUsers } from '../api/user'
+  import { searchTickets } from '../api/ticket'
   
   const authStore = useAuthStore()
-  const ticketStore = useTicketStore()
   const router = useRouter()
   
   const isAuthenticated = computed(() => authStore.isAuthenticated)
@@ -190,42 +201,21 @@
 
   const performSearch = async (query) => {
     try {
-      await ticketStore.fetchAllTickets()
-      const allTickets = ticketStore.getTickets || []
-      const lowerQuery = query.toLowerCase()
-      
-      // Cerca nei ticket (ID, titolo, descrizione, categoria) - case insensitive con null check
-      const matchingTickets = allTickets.filter(ticket => {
-        const id = ticket.id ? ticket.id.toString().toLowerCase() : ''
-        const title = ticket.title ? ticket.title.toLowerCase() : ''
-        const description = ticket.description ? ticket.description.toLowerCase() : ''
-        const category = ticket.category ? ticket.category.toLowerCase() : ''
-        const createdBy = ticket.created_by ? ticket.created_by.toLowerCase() : ''
-        
-        return id.includes(lowerQuery) ||
-               title.includes(lowerQuery) ||
-               description.includes(lowerQuery) ||
-               category.includes(lowerQuery) ||
-               createdBy.includes(lowerQuery)
-      })
-      
-      // Estrai utenti unici con null check
-      const uniqueUsers = [...new Set(
-        allTickets
-          .map(t => t.created_by)
-          .filter(user => user != null && user !== '')
-      )]
-      
-      const matchingUsers = uniqueUsers.filter(user => 
-        user.toLowerCase().includes(lowerQuery)
-      )
+      // Ricerca parallela di ticket e utenti usando endpoint dedicati
+      const [ticketsData, usersData] = await Promise.all([
+        // Ricerca nei ticket tramite API dedicata
+        searchTickets(query, 10).then(response => response.tickets).catch(() => []),
+        // Ricerca utenti tramite API dedicata
+        searchUsers(query, 10).then(response => response.users).catch(() => [])
+      ])
       
       searchResults.value = {
-        tickets: matchingTickets,
-        users: matchingUsers
+        tickets: ticketsData,
+        users: usersData
       }
     } catch (error) {
       console.error('Search error:', error)
+      searchResults.value = { tickets: [], users: [] }
     }
   }
 
@@ -275,6 +265,16 @@
       'LOW': 'badge-success'
     }
     return classes[priority] || 'badge-secondary'
+  }
+
+  const getRoleBadgeClass = (role) => {
+    const roleUpper = role?.toUpperCase()
+    const classes = {
+      'ADMIN': 'badge-danger',
+      'MODERATOR': 'badge-warning',
+      'DEVELOPER': 'badge-primary'
+    }
+    return classes[roleUpper] || 'badge-secondary'
   }
 </script>
   
@@ -616,9 +616,20 @@
   font-size: 0.85rem;
 }
 
+.search-result-email {
+  color: #666;
+  font-size: 0.85rem;
+  font-style: italic;
+}
+
 .search-result-category {
   color: #666;
   font-size: 0.85rem;
+}
+
+.badge-sm {
+  font-size: 0.7rem;
+  padding: 0.2rem 0.5rem;
 }
 
 .search-no-results {

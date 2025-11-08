@@ -17,6 +17,9 @@ router.post('/', authenticateRequest, authorizeAuthenticated, [
 // Get all tickets - guests and authenticated users can view (filtered by role in controller)
 router.get('/', optionalAuthentication, ticketController.getAllTickets);
 
+// Search tickets - all authenticated users can search
+router.get('/search', optionalAuthentication, ticketController.searchTickets);
+
 // Special route for admins/moderators to get all tickets with extended information
 router.get('/admin/all', authenticateRequest, authorizeModerator, ticketController.getAllTicketsAdmin);
 
@@ -52,5 +55,49 @@ router.post('/:ticketId/rating', authenticateRequest, authorizeAuthenticated, [
 
 // Get rating for a ticket
 router.get('/:ticketId/rating', ticketController.getTicketRating);
+
+// NEW RESOLUTION WORKFLOW ROUTES
+
+// Developer requests resolution approval
+router.post('/:ticketId/request-resolution', authenticateRequest, authorizeAuthenticated, ticketController.requestResolution);
+
+// Moderator/Admin approves resolution (awards points)
+router.post('/:ticketId/approve-resolution', authenticateRequest, authorizeModerator, ticketController.approveResolution);
+
+// Moderator/Admin rejects resolution
+router.post('/:ticketId/reject-resolution', authenticateRequest, authorizeModerator, [
+  body('reason').notEmpty().withMessage('Rejection reason is required')
+], ticketController.rejectResolution);
+
+// Get tickets pending approval
+router.get('/admin/pending-approval', authenticateRequest, authorizeModerator, ticketController.getPendingApprovalTickets);
+
+// LEADERBOARD ROUTES
+
+// Get leaderboard (public, shows only developers)
+router.get('/leaderboard/top', ticketController.getLeaderboard);
+
+// Get developer statistics
+router.get('/developers/:developerId/stats', ticketController.getDeveloperStats);
+
+// LEGACY WORKFLOW ROUTES (keeping for backward compatibility)
+
+// Developer marks ticket as solved (awaiting approval)
+router.post('/:ticketId/mark-solved', authenticateRequest, authorizeAuthenticated, ticketController.markAsSolved);
+
+// Moderator/Admin approves solution and closes ticket (awards points)
+router.post('/:ticketId/approve-and-close', authenticateRequest, authorizeModerator, [
+  body('score').optional().isInt({ min: 1 }).withMessage('Score must be a positive integer')
+], ticketController.approveAndClose);
+
+// Moderator/Admin rejects solution and reopens
+router.post('/:ticketId/reject-solution', authenticateRequest, authorizeModerator, [
+  body('reason').optional().isString().withMessage('Reason must be a string')
+], ticketController.rejectSolution);
+
+// Moderator/Admin closes ticket without solution
+router.post('/:ticketId/close-unsolved', authenticateRequest, authorizeModerator, [
+  body('reason').optional().isString().withMessage('Reason must be a string')
+], ticketController.closeUnsolved);
 
 module.exports = router;

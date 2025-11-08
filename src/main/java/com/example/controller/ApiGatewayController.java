@@ -81,6 +81,42 @@ public class ApiGatewayController {
     }
 
     /**
+     * Forward requests to role endpoints in user-service
+     */
+    @RequestMapping(value = "/roles/**", method = {RequestMethod.GET, RequestMethod.POST, RequestMethod.PUT, RequestMethod.DELETE, RequestMethod.OPTIONS})
+    public ResponseEntity<String> forwardToRoleService(
+            HttpServletRequest request,
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @RequestHeader(value = "Content-Type", required = false) String contentType,
+            @RequestBody(required = false) String body) {
+        
+        // Handle OPTIONS requests for CORS preflight
+        if ("OPTIONS".equals(request.getMethod())) {
+            return ResponseEntity.ok().build();
+        }
+        
+        return forwardRequestSimple(request, "http://user-service:3002/api", authorization, contentType, body);
+    }
+
+    /**
+     * Forward requests to moderator endpoints (must be before /users/** to avoid conflict)
+     */
+    @RequestMapping(value = "/moderators/**", method = {RequestMethod.GET, RequestMethod.POST, RequestMethod.PUT, RequestMethod.DELETE, RequestMethod.OPTIONS})
+    public ResponseEntity<String> forwardToModeratorService(
+            HttpServletRequest request,
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @RequestHeader(value = "Content-Type", required = false) String contentType,
+            @RequestBody(required = false) String body) {
+        
+        // Handle OPTIONS requests for CORS preflight
+        if ("OPTIONS".equals(request.getMethod())) {
+            return ResponseEntity.ok().build();
+        }
+        
+        return forwardRequestSimple(request, "http://user-service:3002/api", authorization, contentType, body);
+    }
+
+    /**
      * Forward requests to user service (authentication required)
      */
     @RequestMapping(value = "/users/**", method = {RequestMethod.GET, RequestMethod.POST, RequestMethod.PUT, RequestMethod.DELETE, RequestMethod.OPTIONS})
@@ -96,6 +132,24 @@ public class ApiGatewayController {
         }
         
         return forwardRequestSimple(request, "http://user-service:3002/api", authorization, contentType, body);
+    }
+
+    /**
+     * Forward ticket comments to comment-service (must be before /tickets/**)
+     */
+    @RequestMapping(value = "/tickets/*/comments/**", method = {RequestMethod.GET, RequestMethod.POST, RequestMethod.PUT, RequestMethod.DELETE, RequestMethod.OPTIONS})
+    public ResponseEntity<String> forwardTicketCommentsToCommentService(
+            HttpServletRequest request,
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @RequestHeader(value = "Content-Type", required = false) String contentType,
+            @RequestBody(required = false) String body) {
+        
+        // Handle OPTIONS requests for CORS preflight
+        if ("OPTIONS".equals(request.getMethod())) {
+            return ResponseEntity.ok().build();
+        }
+        
+        return forwardRequestSimple(request, "http://comment-api:5003/api", authorization, contentType, body);
     }
 
     /**
@@ -175,6 +229,12 @@ public class ApiGatewayController {
             if (internalAuth != null) {
                 headers.set("X-Internal-Auth", internalAuth);
             }
+            
+            // If no x-user/x-role, pass Authorization header for JWT fallback
+            String authHeader = request.getHeader("Authorization");
+            if ((userId == null || userRole == null) && authHeader != null) {
+                headers.set("Authorization", authHeader);
+            }
 
             // Copy other relevant headers from original request
             Enumeration<String> headerNames = request.getHeaderNames();
@@ -185,74 +245,6 @@ public class ApiGatewayController {
                     !headerName.equalsIgnoreCase("x-user") && 
                     !headerName.equalsIgnoreCase("x-role") &&
                     !headerName.equalsIgnoreCase("X-Internal-Auth")) {
-                    headers.set(headerName, request.getHeader(headerName));
-                }
-            }
-
-            // Create request entity
-            HttpEntity<String> entity = new HttpEntity<>(body, headers);
-
-            // Determine HTTP method
-            HttpMethod method = HttpMethod.valueOf(request.getMethod());
-
-            // Forward the request
-            ResponseEntity<String> response = restTemplate.exchange(targetUrl, method, entity, String.class);
-
-            return response;
-
-        } catch (HttpClientErrorException e) {
-            return ResponseEntity.status(e.getStatusCode())
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .body(e.getResponseBodyAsString());
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .body("{\"error\":\"Gateway error: " + e.getMessage() + "\"}");
-        }
-    }
-
-
-/**
-     * Generic method to forward requests to backend services including token
-     */
-    private ResponseEntity<String> forwardRequestWithToken(
-            HttpServletRequest request, 
-            String body, 
-            String serviceUrl, 
-            String userId, 
-            String userRole) {
-
-        try {
-            // Extract the path after /api/
-            String originalPath = request.getRequestURI();
-            String servicePath = originalPath.substring(4); // Remove "/api"
-            String targetUrl = serviceUrl + servicePath;
-
-            // Add query parameters if present
-            String queryString = request.getQueryString();
-            if (queryString != null) {
-                targetUrl += "?" + queryString;
-            }
-
-            // Create headers for the backend service
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            
-            // Add trusted headers injected by AuthFilter
-            if (userId != null) {
-                headers.set("x-user", userId);
-            }
-            if (userRole != null) {
-                headers.set("x-role", userRole);
-            }
-
-            // Copy other relevant headers from original request
-            Enumeration<String> headerNames = request.getHeaderNames();
-            while (headerNames.hasMoreElements()) {
-                String headerName = headerNames.nextElement();
-                // Skip authorization header and our custom headers
-                if (!headerName.equalsIgnoreCase("x-user") && 
-                    !headerName.equalsIgnoreCase("x-role")) {
                     headers.set(headerName, request.getHeader(headerName));
                 }
             }
@@ -303,6 +295,12 @@ public class ApiGatewayController {
             
             // Create headers
             HttpHeaders headers = new HttpHeaders();
+            
+            // If authorization parameter is null, try to get it from the request header
+            if (authorization == null) {
+                authorization = request.getHeader("Authorization");
+            }
+            
             if (authorization != null) {
                 headers.set("Authorization", authorization);
             }

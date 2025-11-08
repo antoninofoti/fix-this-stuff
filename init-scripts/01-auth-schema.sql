@@ -1,4 +1,4 @@
--- CREDENTIALS Table to manage access credentials
+-- Credentials table for authentication
 CREATE TABLE credentials (
     id SERIAL PRIMARY KEY,
     username VARCHAR(255) NOT NULL UNIQUE,
@@ -7,7 +7,5 @@ CREATE TABLE credentials (
     role VARCHAR(50) DEFAULT 'developer'
 );
 
--- fix_this_stuff_system table (a global system config shared here for simplicity)
-CREATE TABLE fix_this_stuff_system (
-    id SERIAL PRIMARY KEY
-);
+-- Index to speed up lookups
+CREATE INDEX idx_credentials_email ON credentials(username);

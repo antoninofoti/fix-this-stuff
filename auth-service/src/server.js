@@ -1,5 +1,5 @@
 const express = require('express');
-const cors = require('cors');
+//const cors = require('cors');
 require('dotenv').config();
 
 // Route imports
@@ -19,7 +19,7 @@ const corsOptions = {
 };
 
 // Middleware
-app.use(cors(corsOptions));
+//app.use(cors(corsOptions));
 app.use(express.json());
 
 // Request logging

@@ -226,6 +226,8 @@ const getTicketById = async (req, res) => {
  */
 const updateTicket = async (req, res) => {
   try {
+    console.log('updateTicket called with params:', req.params, 'body:', req.body, 'user:', req.user);
+    
     // Validate request
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -240,13 +242,44 @@ const updateTicket = async (req, res) => {
       return res.status(404).json({ message: 'Ticket not found' });
     }
     
+    console.log('Current ticket state:', ticket);
+    
     const userId = req.user.id;
     const userRole = req.user.role;
     
     // Determine what can be updated based on role
     let updates = {};
     
-    if (userRole === 'admin' || userRole === 'moderator') {
+    // Check for self-assignment FIRST (before author check) - all authenticated users can self-assign
+    const { assigned_developer_id } = req.body;
+    if (assigned_developer_id !== undefined) {
+      console.log('User attempting self-assignment. UserId:', userId, 'Role:', userRole, 'Body:', req.body);
+      
+      // Only allow self-assignment
+      if (assigned_developer_id === userId) {
+        // Only allow assignment if ticket is open and not already assigned
+        if (ticket.flag_status === 'open' && !ticket.assigned_developer_id) {
+          updates.assigned_developer_id = userId;
+          updates.assigned_date = new Date();
+          console.log('Self-assignment allowed. Updates:', updates);
+        } else if (ticket.assigned_developer_id) {
+          console.log('Ticket already assigned to:', ticket.assigned_developer_id);
+          return res.status(400).json({
+            message: 'Ticket is already assigned to another user'
+          });
+        } else if (ticket.flag_status !== 'open') {
+          console.log('Ticket is not open. Status:', ticket.flag_status);
+          return res.status(400).json({
+            message: 'Only open tickets can be assigned'
+          });
+        }
+      } else {
+        console.log('Developer trying to assign to someone else:', assigned_developer_id);
+        return res.status(403).json({
+          message: 'You can only assign tickets to yourself'
+        });
+      }
+    } else if (userRole === 'admin' || userRole === 'moderator') {
       // Admins and moderators can update all fields
       const { title, description, category, priority, status, assigned_to } = req.body;
       
@@ -280,17 +313,25 @@ const updateTicket = async (req, res) => {
       }
       
     } else {
+      console.log('No matching role/permission. Role:', userRole, 'userId:', userId, 'ticket.request_author_id:', ticket.request_author_id);
       return res.status(403).json({
         message: 'You do not have permission to update this ticket'
       });
     }
     
+    console.log('Updates to apply:', updates);
+    
     // Update the ticket
     const updatedTicket = await ticketModel.updateTicket(ticketId, updates);
 
+    // Fetch complete ticket data with user details
+    const completeTicket = await ServiceRegistry.getCompleteTicketData(ticketId, ticketModel);
+
+    console.log('Ticket updated successfully:', completeTicket);
+
     res.status(200).json({
       message: 'Ticket updated successfully',
-      ticket: updatedTicket
+      ticket: completeTicket || updatedTicket
     });
   } catch (error) {
     console.error('Error in updateTicket:', error);
@@ -358,7 +399,6 @@ const updateTicketAdmin = async (req, res) => {
         }
       }
       updateFields.assigned_developer_id = assigned_developer_id;
-      updateFields.assigned_by = req.user.id;
       updateFields.assigned_date = new Date();
     }
     if (answer) updateFields.answer = answer;
@@ -381,13 +421,11 @@ const updateTicketAdmin = async (req, res) => {
             // Assign to the user closing it (developer)
             developerId = req.user.id;
             updateFields.assigned_developer_id = developerId;
-            updateFields.assigned_by = req.user.id;
             updateFields.assigned_date = new Date();
           } else if (userRole === 'admin' || userRole === 'moderator') {
             // Admin/Moderator closing it - assign to themselves if no one else is assigned
             developerId = req.user.id;
             updateFields.assigned_developer_id = developerId;
-            updateFields.assigned_by = req.user.id;
             updateFields.assigned_date = new Date();
           }
         }
@@ -611,6 +649,505 @@ const getTicketRating = async (req, res) => {
   }
 };
 
+/**
+ * Developer marks ticket as solved (awaiting approval)
+ * POST /tickets/:ticketId/mark-solved
+ */
+const markAsSolved = async (req, res) => {
+  try {
+    const { ticketId } = req.params;
+    const userId = req.user.id;
+    const userRole = req.user.role;
+    
+    const ticket = await ticketModel.getTicketById(ticketId);
+    
+    if (!ticket) {
+      return res.status(404).json({ message: 'Ticket not found' });
+    }
+    
+    // Allow developers and admins/moderators
+    if (userRole !== 'developer' && userRole !== 'admin' && userRole !== 'moderator') {
+      return res.status(403).json({ message: 'Only developers can mark tickets as solved' });
+    }
+    
+    // For developers, check if ticket is assigned to them
+    if (userRole === 'developer' && ticket.assigned_developer_id !== userId) {
+      return res.status(403).json({ message: 'You can only mark tickets assigned to you as solved' });
+    }
+    
+    // Admins/moderators can directly mark as solved without approval
+    if (userRole === 'admin' || userRole === 'moderator') {
+      const updates = {
+        solve_status: 'solved',
+        approved_by: userId,
+        approval_date: new Date()
+      };
+      
+      const updatedTicket = await ticketModel.updateTicket(ticketId, updates);
+      return res.status(200).json({
+        message: 'Ticket marked as solved',
+        ticket: updatedTicket
+      });
+    }
+    
+    // For developers, request approval
+    const updatedTicket = await ticketModel.requestResolution(ticketId, userId);
+    
+    res.status(200).json({
+      message: 'Resolution submitted for approval',
+      ticket: updatedTicket
+    });
+  } catch (error) {
+    console.error('Error in markAsSolved:', error);
+    res.status(500).json({ 
+      message: error.message || 'Server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+/**
+ * Developer requests resolution approval for a ticket
+ * POST /tickets/:ticketId/request-resolution
+ */
+const requestResolution = async (req, res) => {
+  try {
+    const { ticketId } = req.params;
+    const userId = req.user.id;
+    const userRole = req.user.role;
+    
+    // All authenticated users can request resolution (developer, moderator, admin)
+    // They must be assigned to the ticket to request resolution
+    const ticket = await ticketModel.getTicketById(ticketId);
+    
+    if (!ticket) {
+      return res.status(404).json({ message: 'Ticket not found' });
+    }
+    
+    if (ticket.assigned_developer_id !== userId) {
+      return res.status(403).json({ 
+        message: 'Only the assigned user can request resolution approval for this ticket' 
+      });
+    }
+    
+    const updatedTicket = await ticketModel.requestResolution(ticketId, userId);
+    
+    res.status(200).json({
+      message: 'Resolution submitted for approval',
+      ticket: updatedTicket
+    });
+  } catch (error) {
+    console.error('Error in requestResolution:', error);
+    res.status(500).json({ 
+      message: error.message || 'Server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+/**
+ * Moderator/Admin approves a ticket resolution
+ * POST /tickets/:ticketId/approve-resolution
+ * Body: { closeTicket: boolean } - optional, defaults to true
+ */
+const approveResolution = async (req, res) => {
+  try {
+    const { ticketId } = req.params;
+    const { closeTicket = true } = req.body; // Default to closing ticket
+    const userId = req.user.id;
+    const userRole = req.user.role;
+    
+    // Only moderators and admins can approve
+    if (userRole !== 'moderator' && userRole !== 'admin') {
+      return res.status(403).json({ 
+        message: 'Only moderators and admins can approve resolutions' 
+      });
+    }
+    
+    const result = await ticketModel.approveResolution(ticketId, userId, closeTicket);
+    
+    // Update user score in user-service (for all roles: developer, moderator, admin)
+    if (result.ticket.resolved_by && result.pointsAwarded) {
+      try {
+        await ServiceRegistry.updateUserScore(result.ticket.resolved_by, result.pointsAwarded);
+        console.log(`Updated user score for user ${result.ticket.resolved_by}: +${result.pointsAwarded} points`);
+      } catch (error) {
+        console.error('Error updating user score in user-service:', error);
+        // Don't fail the approval if score update fails
+      }
+    }
+    
+    res.status(200).json({
+      message: 'Resolution approved successfully',
+      ticket: result.ticket,
+      pointsAwarded: result.pointsAwarded,
+      developerStats: result.developerStats
+    });
+  } catch (error) {
+    console.error('Error in approveResolution:', error);
+    res.status(500).json({ 
+      message: error.message || 'Server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+/**
+ * Moderator/Admin rejects a ticket resolution
+ * POST /tickets/:ticketId/reject-resolution
+ */
+const rejectResolution = async (req, res) => {
+  try {
+    const { ticketId } = req.params;
+    const { reason } = req.body;
+    const userId = req.user.id;
+    const userRole = req.user.role;
+    
+    // Only moderators and admins can reject
+    if (userRole !== 'moderator' && userRole !== 'admin') {
+      return res.status(403).json({ 
+        message: 'Only moderators and admins can reject resolutions' 
+      });
+    }
+    
+    if (!reason || reason.trim() === '') {
+      return res.status(400).json({ 
+        message: 'Rejection reason is required' 
+      });
+    }
+    
+    const updatedTicket = await ticketModel.rejectResolution(ticketId, userId, reason);
+    
+    res.status(200).json({
+      message: 'Resolution rejected',
+      ticket: updatedTicket
+    });
+  } catch (error) {
+    console.error('Error in rejectResolution:', error);
+    res.status(500).json({ 
+      message: error.message || 'Server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+/**
+ * Get tickets pending approval
+ * GET /tickets/pending-approval
+ */
+const getPendingApprovalTickets = async (req, res) => {
+  try {
+    const userRole = req.user.role;
+    
+    // Only moderators and admins can view pending approvals
+    if (userRole !== 'moderator' && userRole !== 'admin') {
+      return res.status(403).json({ 
+        message: 'Only moderators and admins can view pending approvals' 
+      });
+    }
+    
+    const tickets = await ticketModel.getTicketsByApprovalStatus('pending_approval');
+    
+    // Enrich with user data
+    const enrichedTickets = await Promise.all(
+      tickets.map(async (ticket) => {
+        return await ServiceRegistry.getCompleteTicketData(ticket.id, ticketModel);
+      })
+    );
+    
+    res.status(200).json({ 
+      tickets: enrichedTickets.filter(t => t !== null)
+    });
+  } catch (error) {
+    console.error('Error in getPendingApprovalTickets:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+/**
+ * Get leaderboard
+ * GET /leaderboard
+ */
+const getLeaderboard = async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 50;
+    
+    const leaderboard = await ticketModel.getLeaderboard(limit);
+    
+    // Enrich with user data from user-service
+    const enrichedLeaderboard = await Promise.all(
+      leaderboard.map(async (entry) => {
+        try {
+          const userData = await ServiceRegistry.getUserData(entry.developer_id);
+          return {
+            rank: leaderboard.indexOf(entry) + 1,
+            developer_id: entry.developer_id,
+            name: userData ? `${userData.name} ${userData.surname}` : 'Unknown',
+            total_points: entry.total_points,
+            tickets_resolved: entry.tickets_resolved,
+            average_rating: parseFloat(entry.average_rating),
+            last_updated: entry.last_updated
+          };
+        } catch (error) {
+          console.error(`Error fetching user data for developer ${entry.developer_id}:`, error);
+          return {
+            rank: leaderboard.indexOf(entry) + 1,
+            developer_id: entry.developer_id,
+            name: 'Unknown',
+            total_points: entry.total_points,
+            tickets_resolved: entry.tickets_resolved,
+            average_rating: parseFloat(entry.average_rating),
+            last_updated: entry.last_updated
+          };
+        }
+      })
+    );
+    
+    res.status(200).json({ leaderboard: enrichedLeaderboard });
+  } catch (error) {
+    console.error('Error in getLeaderboard:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+/**
+ * Get developer statistics
+ * GET /developers/:developerId/stats
+ */
+const getDeveloperStats = async (req, res) => {
+  try {
+    const { developerId } = req.params;
+    
+    const stats = await ticketModel.getDeveloperStats(developerId);
+    
+    if (!stats) {
+      return res.status(404).json({ 
+        message: 'No statistics found for this developer' 
+      });
+    }
+    
+    // Enrich with user data
+    try {
+      const userData = await ServiceRegistry.getUserData(developerId);
+      stats.name = userData ? `${userData.name} ${userData.surname}` : 'Unknown';
+      stats.email = userData ? userData.email : null;
+    } catch (error) {
+      console.error(`Error fetching user data for developer ${developerId}:`, error);
+      stats.name = 'Unknown';
+    }
+    
+    res.status(200).json({ stats });
+  } catch (error) {
+    console.error('Error in getDeveloperStats:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+/**
+ * Moderator/Admin approves solution and closes ticket (assigns points)
+ * POST /tickets/:ticketId/approve-and-close
+ */
+const approveAndClose = async (req, res) => {
+  try {
+    const { ticketId } = req.params;
+    const userId = req.user.id;
+    const userRole = req.user.role;
+    const { score } = req.body; // Points to award
+    
+    // Only moderators and admins can approve
+    if (userRole !== 'admin' && userRole !== 'moderator') {
+      return res.status(403).json({ 
+        message: 'Only moderators and admins can approve solutions' 
+      });
+    }
+    
+    const ticket = await ticketModel.getTicketById(ticketId);
+    
+    if (!ticket) {
+      return res.status(404).json({ message: 'Ticket not found' });
+    }
+    
+    if (ticket.solve_status !== 'solved') {
+      return res.status(400).json({ 
+        message: 'Ticket must be marked as solved before approval' 
+      });
+    }
+    
+    if (!ticket.resolved_by_id) {
+      return res.status(400).json({ 
+        message: 'No developer assigned to this solution' 
+      });
+    }
+    
+    // Close ticket and assign points to resolver
+    const updates = {
+      flag_status: 'closed',
+      closed_by: userId,
+      closed_date: new Date(),
+      solve_status: 'solved',
+      score: score || ticket.score || 10 // Use provided score or default
+    };
+    
+    const updatedTicket = await ticketModel.updateTicket(ticketId, updates);
+    
+    // Award points to the developer who solved it
+    await ticketModel.awardPoints(ticket.resolved_by_id, updates.score);
+    
+    res.status(200).json({
+      message: 'Solution approved and ticket closed. Points awarded.',
+      ticket: updatedTicket,
+      pointsAwarded: updates.score,
+      awardedTo: ticket.resolved_by_id
+    });
+  } catch (error) {
+    console.error('Error in approveAndClose:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+/**
+ * Moderator/Admin rejects solution and reopens
+ * POST /tickets/:ticketId/reject-solution
+ */
+const rejectSolution = async (req, res) => {
+  try {
+    const { ticketId } = req.params;
+    const userRole = req.user.role;
+    const { reason } = req.body;
+    
+    // Only moderators and admins can reject
+    if (userRole !== 'admin' && userRole !== 'moderator') {
+      return res.status(403).json({ 
+        message: 'Only moderators and admins can reject solutions' 
+      });
+    }
+    
+    const ticket = await ticketModel.getTicketById(ticketId);
+    
+    if (!ticket) {
+      return res.status(404).json({ message: 'Ticket not found' });
+    }
+    
+    // Reset to not solved, keep open
+    const updates = {
+      solve_status: 'not_solved',
+      resolved_by_id: null,
+      resolved_at: null,
+      rejection_reason: reason || null
+    };
+    
+    const updatedTicket = await ticketModel.updateTicket(ticketId, updates);
+    
+    res.status(200).json({
+      message: 'Solution rejected. Ticket reopened.',
+      ticket: updatedTicket
+    });
+  } catch (error) {
+    console.error('Error in rejectSolution:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+/**
+ * Moderator/Admin closes ticket without solution
+ * POST /tickets/:ticketId/close-unsolved
+ */
+const closeUnsolved = async (req, res) => {
+  try {
+    const { ticketId } = req.params;
+    const userId = req.user.id;
+    const userRole = req.user.role;
+    const { reason } = req.body;
+    
+    // Only moderators and admins can close
+    if (userRole !== 'admin' && userRole !== 'moderator') {
+      return res.status(403).json({ 
+        message: 'Only moderators and admins can close tickets' 
+      });
+    }
+    
+    const ticket = await ticketModel.getTicketById(ticketId);
+    
+    if (!ticket) {
+      return res.status(404).json({ message: 'Ticket not found' });
+    }
+    
+    // Close without solution (no points)
+    const updates = {
+      flag_status: 'closed',
+      solve_status: 'not_solved',
+      closed_by: userId,
+      closed_date: new Date(),
+      closure_reason: reason || null
+    };
+    
+    const updatedTicket = await ticketModel.updateTicket(ticketId, updates);
+    
+    res.status(200).json({
+      message: 'Ticket closed without solution. No points awarded.',
+      ticket: updatedTicket
+    });
+  } catch (error) {
+    console.error('Error in closeUnsolved:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+/**
+ * Search tickets by query string
+ * Searches in: id, title, description, category, created_by
+ */
+const searchTickets = async (req, res) => {
+  try {
+    const { query } = req.query;
+
+    if (!query || query.trim().length < 2) {
+      return res.status(400).json({ 
+        message: 'Search query must be at least 2 characters long' 
+      });
+    }
+
+    // Get all tickets
+    const allTickets = await ticketModel.getAllTickets();
+
+    // Filter tickets based on search query
+    const lowerQuery = query.toLowerCase().trim();
+    
+    const filteredTickets = allTickets.filter(ticket => {
+      const id = ticket.id ? ticket.id.toString() : '';
+      const title = ticket.title ? ticket.title.toLowerCase() : '';
+      const description = ticket.request ? ticket.request.toLowerCase() : '';
+      const category = ticket.system_id ? ticket.system_id.toString() : '';
+      const status = ticket.flag_status ? ticket.flag_status.toLowerCase() : '';
+      const priority = ticket.priority ? ticket.priority.toLowerCase() : '';
+      
+      return id.includes(lowerQuery) ||
+             title.includes(lowerQuery) ||
+             description.includes(lowerQuery) ||
+             category.includes(lowerQuery) ||
+             status.includes(lowerQuery) ||
+             priority.includes(lowerQuery);
+    });
+
+    // Limit results to 50
+    const limitedResults = filteredTickets.slice(0, 50);
+
+    // Get complete data for each ticket
+    const ticketsWithDetails = await Promise.all(limitedResults.map(async ticket => {
+      return await ServiceRegistry.getCompleteTicketData(ticket.id, ticketModel);
+    }));
+
+    res.status(200).json({ 
+      tickets: ticketsWithDetails,
+      total: filteredTickets.length,
+      showing: ticketsWithDetails.length
+    });
+  } catch (error) {
+    console.error('Error in searchTickets:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
 module.exports = {
   createTicket,
   getAllTickets,
@@ -620,5 +1157,16 @@ module.exports = {
   updateTicketAdmin,
   deleteTicket,
   rateTicket,
-  getTicketRating
+  getTicketRating,
+  markAsSolved,
+  requestResolution,
+  approveResolution,
+  rejectResolution,
+  getPendingApprovalTickets,
+  getLeaderboard,
+  getDeveloperStats,
+  approveAndClose,
+  rejectSolution,
+  closeUnsolved,
+  searchTickets
 };

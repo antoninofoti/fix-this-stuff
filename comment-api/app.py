@@ -1,5 +1,5 @@
 # comment-api/app.py
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, Blueprint
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 import os
@@ -9,7 +9,7 @@ import json
 import requests
 from functools import wraps
 
-AUTH_SERVICE_URL = os.getenv("AUTH_SERVICE_URL", "http://auth-service:3001/api/auth")
+AUTH_SERVICE_URL = os.getenv("AUTH_SERVICE_URL", "http://auth-service:3001/auth")
 
 def token_required(f):
     @wraps(f)
@@ -21,23 +21,31 @@ def token_required(f):
                 token = auth_header.split(" ")[1]
         
         if not token:
+            print("[!] Token is missing from request", flush=True)
             return jsonify({"message": "Token is missing"}), 401
         
         try:
+            print(f"[*] Verifying token with auth-service: {AUTH_SERVICE_URL}/verify-token", flush=True)
             resp = requests.get(
                 f"{AUTH_SERVICE_URL}/verify-token",
                 headers={"Authorization": f"Bearer {token}"}
             )
+            print(f"[*] Auth-service response status: {resp.status_code}", flush=True)
             if resp.status_code != 200:
+                print(f"[!] Auth-service returned non-200: {resp.text}", flush=True)
                 return jsonify({"message": "Invalid or expired token"}), 401
             
             data = resp.json()
+            print(f"[*] Auth-service response data: {data}", flush=True)
             if not data.get("valid"):
+                print(f"[!] Token validation failed", flush=True)
                 return jsonify({"message": "Invalid token"}), 401
             
             # Attach user info to request
             request.user = data["user"]  # {'id': 2, 'email': ..., 'role': ...}
+            print(f"[✓] Token verified successfully for user: {request.user}", flush=True)
         except Exception as e:
+            print(f"[!] Exception during token verification: {e}", flush=True)
             return jsonify({"message": f"Token verification failed: {e}"}), 500
 
         return f(*args, **kwargs)
@@ -133,23 +141,49 @@ def publish_event(event_type, data):
         print(f"[!] Failed to publish {event_type} event: {e}", flush=True)
 
 
+# Create Blueprint with /api prefix
+api_bp = Blueprint('api', __name__, url_prefix='/api')
+
 # Routes
-@app.route('/tickets/<int:ticket_id>/comments', methods=['GET'])
+@api_bp.route('/tickets/<int:ticket_id>/comments', methods=['GET'])
 @optional_token
 def get_comments(ticket_id):
     comments = Comment.query.filter_by(ticket_id=ticket_id).order_by(Comment.creation_date).all()
-    return jsonify([
-        {
+    
+    # Populate author details for each comment
+    comments_with_authors = []
+    user_service_url = os.getenv("USER_SERVICE_URL", "http://user-service:3002")
+    
+    for c in comments:
+        comment_data = {
             "id": c.id,
             "ticket_id": c.ticket_id,
             "author_id": c.author_id,
             "comment_text": c.comment_text,
-            "creation_date": c.creation_date.strftime("%Y-%m-%d %H:%M")
+            "creation_date": c.creation_date.isoformat()
         }
-        for c in comments
-    ])
+        
+        # Fetch author details from user-service
+        try:
+            resp = requests.get(f"{user_service_url}/api/users/internal/{c.author_id}", timeout=3)
+            if resp.status_code == 200:
+                user_data = resp.json().get("user")
+                if user_data:
+                    comment_data["author"] = {
+                        "name": user_data.get("name"),
+                        "surname": user_data.get("surname"),
+                        "email": user_data.get("email"),
+                        "username": user_data.get("username")
+                    }
+        except Exception as e:
+            print(f"[!] Failed to fetch user {c.author_id}: {e}", flush=True)
+            # Continue without author details
+        
+        comments_with_authors.append(comment_data)
+    
+    return jsonify(comments_with_authors)
 
-@app.route('/comments', methods=['POST'])
+@api_bp.route('/comments', methods=['POST'])
 @token_required
 def post_comment():
     data = request.get_json()
@@ -163,7 +197,7 @@ def post_comment():
     publish_event("created", comment_data)
     return jsonify({"message": "Comment submitted successfully to RabbitMQ"}), 201
 
-@app.route('/comments/<int:comment_id>', methods=['PUT'])
+@api_bp.route('/comments/<int:comment_id>', methods=['PUT'])
 @token_required
 def update_comment(comment_id):
     data = request.get_json()
@@ -181,28 +215,20 @@ def update_comment(comment_id):
     }
     
     publish_event("updated", event_data)
-
     return jsonify({"message": "Comment update request successfully submitted to rabbitMQ"})
 
-
-@app.route('/comments/<int:comment_id>', methods=['DELETE'])
+@api_bp.route('/comments/<int:comment_id>', methods=['DELETE'])
 @token_required
 def delete_comment(comment_id):
-    #comment = Comment.query.get(comment_id)
-    #if not comment:
-    #    return jsonify({"message": "Comment not found"}), 404
-
-    #db.session.delete(comment)
-    #db.session.commit()
-
     event_data = {"id": comment_id}
     publish_event("deleted", event_data)
-
     return jsonify({"message": "Comment delete request successfully submitted to rabbitMQ"})
+
+# Register blueprint
+app.register_blueprint(api_bp)
 
 @app.route('/health', methods=['GET'])
 def health():
-    #return "OK", 200
     return jsonify({
         "status": "OK",
         "service": "comment-api",

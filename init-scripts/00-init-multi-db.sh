@@ -8,14 +8,6 @@ execute_sql() {
     psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$dbname" -f "$sql_file"
 }
 
-# Function to generate and execute SQL for admin user against a specific database
-execute_admin_sql() {
-    local dbname="$1"
-    local target_for_script="$2" # 'auth' or 'user'
-    # Generate the SQL content and execute it via psql, redirecting the script's output to psql's stdin
-    /app/scripts/helpers/_generate-admin-password.sh "${target_for_script}" | psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$dbname"
-}
-
 # Create databases if they don't exist
 DATABASES=("authdb" "userdb" "ticketdb")
 for dbname in "${DATABASES[@]}"; do
@@ -33,16 +25,7 @@ execute_sql "authdb" "/docker-entrypoint-initdb.d/01-auth-schema.sql"
 execute_sql "userdb" "/docker-entrypoint-initdb.d/02-user-schema.sql"
 execute_sql "ticketdb" "/docker-entrypoint-initdb.d/03-ticket-schema.sql"
 
-# Generate and insert default admin credentials into authdb
-execute_admin_sql "authdb" "auth"
-
-# Generate and insert default admin user profile into userdb
-execute_admin_sql "userdb" "user"
-
-# Apply role updates only to userdb (where the users table exists)
-execute_sql "userdb" "/docker-entrypoint-initdb.d/05-role-update.sql"
-
-# Apply ticket updates
-execute_sql "ticketdb" "/docker-entrypoint-initdb.d/06-ticket-updates.sql"
+# Create default admin user (needs to run without specific database context to switch between them)
+psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" -f "/docker-entrypoint-initdb.d/04-default-admin.sql"
 
 echo "Multi-database initialization complete."

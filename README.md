@@ -1,225 +1,447 @@
-# Fix This Stuff - Ticket Management System
+# Fix This Stuff# Fix This Stuff - Ticket Management System
 
-A comprehensive microservices-based platform for managing technical support tickets, developer resources, and collaborative problem-solving.
 
-## Table of Contents
 
-- [Overview](#overview)
+A full-stack ticketing system for managing technical support requests with role-based access control, real-time notifications, and gamification features.A comprehensive microservices-based platform for managing technical support tickets, developer resources, and collaborative problem-solving.
+
+
+
+## Overview## Table of Contents
+
+
+
+Fix This Stuff is a microservices-based ticketing platform designed for organizations to manage technical support requests efficiently. The system features a point-based leaderboard to encourage developer participation, a resolution approval workflow, and comprehensive user management.- [Overview](#overview)
+
 - [Architecture](#architecture)
-- [Services](#services)
+
+## Key Features- [Services](#services)
+
 - [Authentication & Security](#authentication--security)
-- [Getting Started](#getting-started)
-- [API Documentation](#api-documentation)
-- [Development Guide](#development-guide)
-- [Troubleshooting](#troubleshooting)
-- [Project Status](#project-status)
 
-## Overview
+- **Ticket Management**: Create, update, assign, and track technical support tickets- [Getting Started](#getting-started)
 
-Fix This Stuff is a modern ticket management system built with a microservices architecture, featuring:
+- **Role-Based Access Control**: Three-tier permission system (Developer, Moderator, Admin)- [API Documentation](#api-documentation)
 
-- JWT-based authentication with role-based access control
-- Real-time comment system using RabbitMQ event streaming
-- RESTful API Gateway for centralized routing and security
-- Containerized deployment with Docker Compose
-- Vue.js frontend with responsive UI
+- **Resolution Workflow**: Developer-submitted solutions require moderator approval- [Development Guide](#development-guide)
 
-## Architecture
+- **Gamification**: Point-based leaderboard system to encourage participation- [Troubleshooting](#troubleshooting)
 
-### System Components
+- **Real-Time Updates**: RabbitMQ-powered notifications for ticket updates- [Project Status](#project-status)
 
-```
-┌─────────────┐     ┌──────────────┐     ┌─────────────────┐
-│  Frontend   │────>│ API Gateway  │────>│  Microservices  │
-│  (Vue.js)   │     │ (Spring Boot)│     │   (Node.js)     │
-└─────────────┘     └──────────────┘     └─────────────────┘
-                           │                       │
+- **Search Functionality**: Fast server-side search for tickets and users
+
+- **Rating System**: Ticket requesters can rate resolved tickets## Overview
+
+
+
+## Technology StackFix This Stuff is a modern ticket management system built with a microservices architecture, featuring:
+
+
+
+### Backend- JWT-based authentication with role-based access control
+
+- **API Gateway**: Java Spring Boot 3.3.5- Real-time comment system using RabbitMQ event streaming
+
+- **Microservices**: Node.js (Express)- RESTful API Gateway for centralized routing and security
+
+  - Authentication Service- Containerized deployment with Docker Compose
+
+  - User Service- Vue.js frontend with responsive UI
+
+  - Ticket Service
+
+- **Comments Service**: Python Flask with RabbitMQ consumer## Architecture
+
+- **Database**: PostgreSQL 16 (multi-database architecture)
+
+- **Message Queue**: RabbitMQ 3.13### System Components
+
+
+
+### Frontend```
+
+- **Framework**: Vue 3 (Composition API)┌─────────────┐     ┌──────────────┐     ┌─────────────────┐
+
+- **State Management**: Pinia│  Frontend   │────>│ API Gateway  │────>│  Microservices  │
+
+- **HTTP Client**: Axios│  (Vue.js)   │     │ (Spring Boot)│     │   (Node.js)     │
+
+- **UI Framework**: Bootstrap 5└─────────────┘     └──────────────┘     └─────────────────┘
+
+- **Build Tool**: Vite                           │                       │
+
                            v                       v
-                    ┌──────────────┐      ┌──────────────┐
+
+## Architecture                    ┌──────────────┐      ┌──────────────┐
+
                     │  AuthFilter  │      │  PostgreSQL  │
-                    │  (JWT Verify)│      │  (Databases) │
+
+The system follows a microservices architecture with the following components:                    │  (JWT Verify)│      │  (Databases) │
+
                     └──────────────┘      └──────────────┘
-```
 
-### Microservices Architecture
+- **API Gateway** (Port 8081): Single entry point, handles routing and CORS```
 
-The application follows a microservices pattern with service isolation:
+- **Auth Service** (Port 3001): User authentication and credential management
 
-- **Separate databases** per service (authdb, userdb, ticketdb)
-- **API Gateway** for request routing and authentication
-- **Service-to-service communication** via REST APIs
+- **User Service** (Port 3002): User profiles, roles, and permissions### Microservices Architecture
+
+- **Ticket Service** (Port 3003): Ticket CRUD operations and business logic
+
+- **Comment API** (Port 5003): Comment management with FlaskThe application follows a microservices pattern with service isolation:
+
+- **Comments Consumer**: RabbitMQ consumer for asynchronous processing
+
+- **PostgreSQL**: Three separate databases (authdb, userdb, ticketdb)- **Separate databases** per service (authdb, userdb, ticketdb)
+
+- **RabbitMQ**: Message queue for notifications and events- **API Gateway** for request routing and authentication
+
+- **Frontend** (Port 80): Vue.js SPA served by Nginx- **Service-to-service communication** via REST APIs
+
 - **Event-driven comments** using RabbitMQ message broker
+
+## Quick Start
 
 ### Technology Stack
 
+### Prerequisites
+
 #### Backend
-- **API Gateway**: Spring Boot (Java), port 8081
-- **Auth Service**: Node.js/Express, port 3001
+
+- Docker 20.10+- **API Gateway**: Spring Boot (Java), port 8081
+
+- Docker Compose 2.0+- **Auth Service**: Node.js/Express, port 3001
+
 - **User Service**: Node.js/Express, port 3002
-- **Ticket Service**: Node.js/Express, port 3003
+
+### Installation- **Ticket Service**: Node.js/Express, port 3003
+
 - **Comment API**: Python/Flask, port 5003
-- **Comments Consumer**: Python (RabbitMQ consumer)
 
-#### Infrastructure
-- **Database**: PostgreSQL (separate databases per service)
-- **Message Broker**: RabbitMQ
+1. Clone the repository:- **Comments Consumer**: Python (RabbitMQ consumer)
+
+```bash
+
+git clone https://github.com/antoninofoti/fix-this-stuff.git#### Infrastructure
+
+cd fix-this-stuff- **Database**: PostgreSQL (separate databases per service)
+
+```- **Message Broker**: RabbitMQ
+
 - **Reverse Proxy**: Nginx (for frontend)
-- **Container Orchestration**: Docker Compose
 
-#### Frontend
-- **Framework**: Vue.js 3 with Composition API
+2. Start all services:- **Container Orchestration**: Docker Compose
+
+```bash
+
+docker compose up -d#### Frontend
+
+```- **Framework**: Vue.js 3 with Composition API
+
 - **State Management**: Pinia
-- **Routing**: Vue Router
+
+3. Wait for services to initialize (approximately 30 seconds)- **Routing**: Vue Router
+
 - **HTTP Client**: Axios
-- **UI Framework**: Bootstrap 5
-- **Build Tool**: Vite
 
-## Services
+4. Access the application:- **UI Framework**: Bootstrap 5
 
-### Auth Service (Port 3001)
+   - Frontend: http://localhost- **Build Tool**: Vite
 
-Handles authentication and credential management.
+   - API Gateway: http://localhost:8081
 
-**Responsibilities:**
+   - PgAdmin: http://localhost:8080## Services
+
+
+
+### Default Credentials### Auth Service (Port 3001)
+
+
+
+**Admin Account:**Handles authentication and credential management.
+
+- Email: `admin@fixthisstuff.com`
+
+- Password: `admin123`**Responsibilities:**
+
 - User registration and login
-- JWT token generation and verification
-- Credential storage and validation
-- Password hashing with bcrypt
 
-**Database**: `authdb`
+**PgAdmin:**- JWT token generation and verification
+
+- Email: `admin@admin.com`- Credential storage and validation
+
+- Password: `admin`- Password hashing with bcrypt
+
+
+
+## Documentation**Database**: `authdb`
+
 - Table: `credentials` (id, username, password, created_at)
 
+Comprehensive documentation is available in the `/documentation` directory:
+
 **API Endpoints:**
-- `POST /api/auth/register` - Register new user
-- `POST /api/auth/login` - Authenticate user
-- `GET /api/auth/verify-token` - Verify JWT token validity
-- `POST /api/auth/verify-token` - Verify token via POST body
-- `GET /api/auth/health` - Health check
+
+- **[API Reference](documentation/API.md)**: Complete API endpoint documentation- `POST /api/auth/register` - Register new user
+
+- **[Architecture Guide](documentation/ARCHITECTURE.md)**: System design and component interaction- `POST /api/auth/login` - Authenticate user
+
+- **[Development Guide](documentation/DEVELOPMENT.md)**: Setup and development workflows- `GET /api/auth/verify-token` - Verify JWT token validity
+
+- **[Frontend Guide](documentation/FRONTEND_GUIDE.md)**: Vue.js components and state management- `POST /api/auth/verify-token` - Verify token via POST body
+
+- **[Security Guide](documentation/SECURITY.md)**: Authentication and authorization details- `GET /api/auth/health` - Health check
+
+- **[Troubleshooting](documentation/TROUBLESHOOTING.md)**: Common issues and solutions
 
 ### User Service (Port 3002)
 
+## Development
+
 Manages user profiles, roles, and permissions.
 
+### Running in Development Mode
+
 **Responsibilities:**
-- User profile CRUD operations
-- Role management (developer, moderator, admin)
-- User skills tracking
+
+```bash- User profile CRUD operations
+
+# Start all services- Role management (developer, moderator, admin)
+
+docker compose up -d- User skills tracking
+
 - Authorization checks
 
-**Database**: `userdb`
+# View logs
+
+docker compose logs -f [service-name]**Database**: `userdb`
+
 - Table: `users` (id, email, name, surname, role, credentials_id)
-- Table: `user_skills` (user_id, skill)
+
+# Restart a specific service- Table: `user_skills` (user_id, skill)
+
+docker compose restart [service-name]
 
 **API Endpoints:**
-- `GET /api/users` - List all users (admin only)
-- `GET /api/users/:userId` - Get user details
-- `PUT /api/users/:userId` - Update user profile
+
+# Stop all services- `GET /api/users` - List all users (admin only)
+
+docker compose down- `GET /api/users/:userId` - Get user details
+
+```- `PUT /api/users/:userId` - Update user profile
+
 - `DELETE /api/users/:userId` - Delete user (admin only)
-- `GET /api/roles` - List available roles
+
+### Database Access- `GET /api/roles` - List available roles
+
 - `PUT /api/users/:userId/role` - Update user role (admin only)
 
-### Ticket Service (Port 3003)
+**Using PgAdmin:**
 
-Manages support tickets and topics.
+1. Navigate to http://localhost:8080### Ticket Service (Port 3003)
 
-**Responsibilities:**
-- Ticket CRUD operations
-- Priority and status management
+2. Login with PgAdmin credentials
+
+3. Add server with:Manages support tickets and topics.
+
+   - Host: `postgres-fts`
+
+   - Port: `5432`**Responsibilities:**
+
+   - Username: `postgres`- Ticket CRUD operations
+
+   - Password: `postgres`- Priority and status management
+
 - Ticket assignment to developers
-- Topic categorization
 
-**Database**: `ticketdb`
-- Table: `ticket` (id, title, priority, status, request, answer, etc.)
+**Using psql:**- Topic categorization
+
+```bash
+
+docker exec -it postgres-fts psql -U postgres -d [database-name]**Database**: `ticketdb`
+
+```- Table: `ticket` (id, title, priority, status, request, answer, etc.)
+
 - Table: `topic` (id, name)
-- Table: `ticket_topic` (ticket_id, topic_id)
+
+### Running Tests- Table: `ticket_topic` (ticket_id, topic_id)
+
 - Table: `comment` (id, comment_text, author_id, ticket_id, creation_date)
 
-**API Endpoints:**
-- `GET /api/tickets` - List all tickets
-- `POST /api/tickets` - Create new ticket
+```bash
+
+# Run tests for a specific service**API Endpoints:**
+
+docker exec [service-name] npm test- `GET /api/tickets` - List all tickets
+
+```- `POST /api/tickets` - Create new ticket
+
 - `GET /api/tickets/:ticketId` - Get ticket details
-- `PUT /api/tickets/:ticketId` - Update ticket
+
+## Project Structure- `PUT /api/tickets/:ticketId` - Update ticket
+
 - `DELETE /api/tickets/:ticketId` - Delete ticket
 
-### Comment API (Port 5003)
+```
 
-Flask-based API for managing ticket comments with event-driven architecture.
+fix-this-stuff/### Comment API (Port 5003)
 
-**Responsibilities:**
-- Comment CRUD operations
-- Publishing comment events to RabbitMQ
-- JWT token validation
-- Direct database reads for performance
+├── auth-service/          # Authentication microservice
 
-**API Endpoints:**
-- `GET /tickets/:ticketId/comments` - List comments for a ticket
+├── user-service/          # User management microserviceFlask-based API for managing ticket comments with event-driven architecture.
+
+├── ticket-service/        # Ticket management microservice
+
+├── comment-api/           # Comment API (Flask)**Responsibilities:**
+
+├── comments-service/      # RabbitMQ consumer- Comment CRUD operations
+
+├── src/                   # API Gateway (Spring Boot)- Publishing comment events to RabbitMQ
+
+├── ui/                    # Vue.js frontend- JWT token validation
+
+├── init-scripts/          # Database initialization scripts- Direct database reads for performance
+
+├── documentation/         # Project documentation
+
+└── docker-compose.yml     # Docker services configuration**API Endpoints:**
+
+```- `GET /tickets/:ticketId/comments` - List comments for a ticket
+
 - `POST /comments` - Create new comment (publishes event)
-- `PUT /comments/:commentId` - Update comment (publishes event)
+
+## API Overview- `PUT /comments/:commentId` - Update comment (publishes event)
+
 - `DELETE /comments/:commentId` - Delete comment (publishes event)
-- `GET /health` - Health check
 
-### Comments Service (Consumer)
+All API requests go through the API Gateway at `http://localhost:8081/api`- `GET /health` - Health check
 
-Python service that consumes RabbitMQ events for asynchronous comment persistence.
+
+
+### Authentication Endpoints### Comments Service (Consumer)
+
+- `POST /api/auth/register` - User registration
+
+- `POST /api/auth/login` - User loginPython service that consumes RabbitMQ events for asynchronous comment persistence.
+
+- `GET /api/auth/verify-token` - Validate JWT token
 
 **Responsibilities:**
-- Listen to comment events (created, updated, deleted)
-- Persist changes to PostgreSQL
-- Ensure eventual consistency
 
-**Events Handled:**
-- `comment.created` - Insert new comment
-- `comment.updated` - Update comment text
+### Ticket Endpoints- Listen to comment events (created, updated, deleted)
+
+- `GET /api/tickets` - List all tickets- Persist changes to PostgreSQL
+
+- `GET /api/tickets/search` - Search tickets- Ensure eventual consistency
+
+- `POST /api/tickets` - Create new ticket
+
+- `GET /api/tickets/:id` - Get ticket details**Events Handled:**
+
+- `PUT /api/tickets/:id` - Update ticket- `comment.created` - Insert new comment
+
+- `DELETE /api/tickets/:id` - Delete ticket (Admin/Moderator)- `comment.updated` - Update comment text
+
 - `comment.deleted` - Remove comment
 
-### API Gateway (Port 8081)
+### User Endpoints
 
-Spring Boot gateway for routing, authentication, and CORS.
+- `GET /api/users` - List all users (Admin/Moderator)### API Gateway (Port 8081)
+
+- `GET /api/users/search` - Search users (Admin/Moderator)
+
+- `GET /api/users/:id` - Get user detailsSpring Boot gateway for routing, authentication, and CORS.
+
+- `PUT /api/users/:id` - Update user profile
 
 **Responsibilities:**
-- Route requests to appropriate microservices
+
+For complete API documentation, see [API.md](documentation/API.md).- Route requests to appropriate microservices
+
 - JWT token validation via AuthFilter
-- CORS configuration for frontend
+
+## User Roles- CORS configuration for frontend
+
 - Request/response logging
-- Header management for internal communication
 
-**Routing:**
-- `/api/auth/**` → Auth Service (no authentication required)
-- `/api/users/**` → User Service
+### Developer (Default)- Header management for internal communication
+
+- Create and view tickets
+
+- Submit solutions for approval**Routing:**
+
+- View leaderboard- `/api/auth/**` → Auth Service (no authentication required)
+
+- Rate resolved tickets- `/api/users/**` → User Service
+
 - `/api/tickets/**` → Ticket Service
-- `/api/comments/**` → Comment API
-- `/api/roles/**` → User Service
 
-### Frontend UI (Port 80/5173)
+### Moderator- `/api/comments/**` → Comment API
 
-Vue.js single-page application with responsive design.
+- All developer permissions- `/api/roles/**` → User Service
 
-**Features:**
-- User authentication (login/register)
-- Ticket browsing and creation
-- User management (admin)
-- Role assignment
-- Responsive Bootstrap UI
+- Approve/reject ticket resolutions
 
-**Routes:**
+- Assign tickets to developers### Frontend UI (Port 80/5173)
+
+- View user list
+
+- Manage ticket statusVue.js single-page application with responsive design.
+
+
+
+### Admin**Features:**
+
+- All moderator permissions- User authentication (login/register)
+
+- Manage user roles- Ticket browsing and creation
+
+- Delete tickets- User management (admin)
+
+- Access admin dashboard- Role assignment
+
+- Full system control- Responsive Bootstrap UI
+
+
+
+## Contributing**Routes:**
+
 - `/` - Home page
-- `/login` - User login
-- `/register` - User registration
-- `/tickets` - Ticket list
-- `/tickets/:id` - Ticket details
+
+1. Fork the repository- `/login` - User login
+
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)- `/register` - User registration
+
+3. Commit your changes (`git commit -m 'Add amazing feature'`)- `/tickets` - Ticket list
+
+4. Push to the branch (`git push origin feature/amazing-feature`)- `/tickets/:id` - Ticket details
+
+5. Open a Pull Request
 
 ## Authentication & Security
 
+## License
+
 ### JWT Token Flow
+
+This project is licensed under the MIT License.
 
 The system implements a secure JWT-based authentication mechanism:
 
+## Support
+
 1. **User Login**: Client sends credentials to `/api/auth/login`
-2. **Token Generation**: Auth service validates credentials and generates JWT
+
+For issues, questions, or contributions, please open an issue on GitHub.2. **Token Generation**: Auth service validates credentials and generates JWT
+
 3. **Token Storage**: Frontend stores token in localStorage
-4. **Authenticated Requests**: Client includes token in Authorization header
+
+## Version4. **Authenticated Requests**: Client includes token in Authorization header
+
 5. **Gateway Validation**: API Gateway validates JWT using AuthFilter
-6. **Header Injection**: Gateway adds trusted headers (x-user, x-role) for microservices
+
+Current Version: 1.0.06. **Header Injection**: Gateway adds trusted headers (x-user, x-role) for microservices
+
 7. **Service Authorization**: Microservices check headers for authorization
 
 ### Security Architecture

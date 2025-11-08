@@ -1,5 +1,5 @@
 const express = require('express');
-const cors = require('cors');
+//const cors = require('cors');
 require('dotenv').config();
 
 // Route imports
@@ -15,7 +15,7 @@ const app = express();
 const PORT = process.env.PORT || 3002;
 
 // Middleware
-app.use(cors());
+//app.use(cors());
 app.use(express.json());
 
 // Request logging
@@ -27,6 +27,8 @@ app.use((req, res, next) => {
 // Internal routes (no authentication required)
 app.post('/api/users/internal/create', userController.createUserInternal);
 app.get('/api/users/internal/:userId', userController.internalGetUserById);
+app.patch('/api/users/internal/:userId/rank', userController.updateUserRank);
+app.patch('/api/users/internal/:userId/score', userController.updateUserScore);
 app.get('/api/users/by-credential/:credentialId', userController.getUserByCredentialId);
 
 // Public routes (no authentication required)

@@ -394,13 +394,10 @@ const TicketModel = {
    * @returns {Promise<Object>} Created rating
    */
   async createTicketRating(ratingData) {
-    const client = await db.getClient();
     try {
-      await client.query('BEGIN');
-      
       // Check if rating already exists for this ticket
       const checkQuery = `SELECT id FROM ticket_rating WHERE ticket_id = $1`;
-      const checkResult = await client.query(checkQuery, [ratingData.ticket_id]);
+      const checkResult = await db.query(checkQuery, [ratingData.ticket_id]);
       
       if (checkResult.rows.length > 0) {
         throw new Error('This ticket has already been rated');
@@ -413,27 +410,17 @@ const TicketModel = {
         RETURNING *
       `;
       
-      const { rows } = await client.query(insertQuery, [
+      const { rows } = await db.query(insertQuery, [
         ratingData.ticket_id,
         ratingData.rating,
         ratingData.comment || null,
         ratingData.rated_by
       ]);
       
-      // Update ticket with rating_id
-      await client.query(
-        'UPDATE ticket SET rating_id = $1 WHERE id = $2',
-        [rows[0].id, ratingData.ticket_id]
-      );
-      
-      await client.query('COMMIT');
       return rows[0];
     } catch (error) {
-      await client.query('ROLLBACK');
       console.error('Error creating ticket rating:', error);
       throw error;
-    } finally {
-      client.release();
     }
   },
 
@@ -454,6 +441,364 @@ const TicketModel = {
       return rows.length > 0 ? rows[0] : null;
     } catch (error) {
       console.error(`Error retrieving rating for ticket ${ticketId}:`, error);
+      throw error;
+    }
+  },
+
+  /**
+   * Developer requests resolution approval for a ticket
+   * Sets solve_status to 'pending_approval'
+   * @param {number} ticketId - Ticket ID
+   * @param {number} developerId - Developer requesting approval
+   * @returns {Promise<Object>} Updated ticket
+   */
+  async requestResolution(ticketId, developerId) {
+    const client = await db.getClient();
+    try {
+      await client.query('BEGIN');
+      
+      // Check ticket exists and is assigned to this developer
+      const checkQuery = `
+        SELECT id, assigned_developer_id, flag_status, solve_status 
+        FROM ticket 
+        WHERE id = $1
+      `;
+      const checkResult = await client.query(checkQuery, [ticketId]);
+      
+      if (checkResult.rows.length === 0) {
+        throw new Error('Ticket not found');
+      }
+      
+      const ticket = checkResult.rows[0];
+      
+      if (ticket.assigned_developer_id !== developerId) {
+        throw new Error('Ticket not assigned to this developer');
+      }
+      
+      if (ticket.solve_status === 'pending_approval') {
+        throw new Error('Resolution already pending approval');
+      }
+      
+      if (ticket.solve_status === 'solved') {
+        throw new Error('Ticket already solved and approved');
+      }
+      
+      // Update ticket
+      const updateQuery = `
+        UPDATE ticket 
+        SET solve_status = 'pending_approval',
+            resolved_by = $1,
+            resolved_at = NOW()
+        WHERE id = $2
+        RETURNING *
+      `;
+      
+      const { rows } = await client.query(updateQuery, [developerId, ticketId]);
+      
+      await client.query('COMMIT');
+      return rows[0];
+    } catch (error) {
+      await client.query('ROLLBACK');
+      console.error('Error requesting resolution:', error);
+      throw error;
+    } finally {
+      client.release();
+    }
+  },
+
+  /**
+   * Moderator/Admin approves a ticket resolution
+   * Awards points to the developer
+   * @param {number} ticketId - Ticket ID
+   * @param {number} approverId - Moderator/Admin approving
+   * @param {boolean} closeTicket - Whether to close the ticket (default: true)
+   * @returns {Promise<Object>} Updated ticket with points awarded
+   */
+  async approveResolution(ticketId, approverId, closeTicket = true) {
+    const client = await db.getClient();
+    try {
+      await client.query('BEGIN');
+      
+      // Get ticket details
+      const ticketQuery = `
+        SELECT id, resolved_by, solve_status, priority
+        FROM ticket 
+        WHERE id = $1
+      `;
+      const ticketResult = await client.query(ticketQuery, [ticketId]);
+      
+      if (ticketResult.rows.length === 0) {
+        throw new Error('Ticket not found');
+      }
+      
+      const ticket = ticketResult.rows[0];
+      
+      if (ticket.solve_status !== 'pending_approval') {
+        throw new Error('Ticket is not pending approval');
+      }
+      
+      if (!ticket.resolved_by) {
+        throw new Error('No developer assigned to this resolution');
+      }
+      
+      // Prevent self-approval: the person approving cannot be the same as the person who resolved
+      if (ticket.resolved_by === approverId) {
+        throw new Error('You cannot approve a ticket that you resolved yourself');
+      }
+      
+      // Calculate base points based on priority
+      const priorityPoints = {
+        'high': 10,
+        'medium': 5,
+        'low': 2
+      };
+      
+      let pointsAwarded = priorityPoints[ticket.priority.toLowerCase()] || 5;
+      
+      // Add bonus points if ticket has a rating
+      let ratingBonus = 0;
+      const ratingQuery = `SELECT rating FROM ticket_rating WHERE ticket_id = $1`;
+      const ratingResult = await client.query(ratingQuery, [ticketId]);
+      if (ratingResult.rows.length > 0) {
+        const rating = ratingResult.rows[0].rating;
+        ratingBonus = rating * 2; // rating 1-5 gives 2-10 bonus points
+        pointsAwarded += ratingBonus;
+      }
+      
+      // Build update query - conditionally close ticket
+      let updateTicketQuery;
+      let updateParams;
+      
+      if (closeTicket) {
+        updateTicketQuery = `
+          UPDATE ticket 
+          SET solve_status = 'solved',
+              flag_status = 'closed',
+              approved_by = $1,
+              approval_date = NOW(),
+              closed_by = $1,
+              closed_date = NOW()
+          WHERE id = $2
+          RETURNING *
+        `;
+        updateParams = [approverId, ticketId];
+      } else {
+        updateTicketQuery = `
+          UPDATE ticket 
+          SET solve_status = 'solved',
+              approved_by = $1,
+              approval_date = NOW()
+          WHERE id = $2
+          RETURNING *
+        `;
+        updateParams = [approverId, ticketId];
+      }
+      
+      const { rows } = await client.query(updateTicketQuery, updateParams);
+      
+      // Check if resolved_by is a developer (only developers get points)
+      // We need to call user-service to check the role
+      // For now, we'll award points and let the controller handle the role check
+      // This is a safeguard: we should only award points if it's a developer
+      
+      // Update or create developer_points record
+      const upsertPointsQuery = `
+        INSERT INTO developer_points (developer_id, total_points, tickets_resolved, last_updated)
+        VALUES ($1, $2, 1, NOW())
+        ON CONFLICT (developer_id) 
+        DO UPDATE SET 
+          total_points = developer_points.total_points + $2,
+          tickets_resolved = developer_points.tickets_resolved + 1,
+          last_updated = NOW()
+        RETURNING *
+      `;
+      
+      const pointsResult = await client.query(upsertPointsQuery, [ticket.resolved_by, pointsAwarded]);
+      
+      // Recalculate average rating for this developer
+      const avgRatingQuery = `
+        SELECT AVG(tr.rating) as avg_rating
+        FROM ticket t
+        JOIN ticket_rating tr ON tr.ticket_id = t.id
+        WHERE t.resolved_by = $1 AND t.solve_status = 'solved'
+      `;
+      
+      const avgResult = await client.query(avgRatingQuery, [ticket.resolved_by]);
+      const avgRating = avgResult.rows[0].avg_rating || 0;
+      
+      await client.query(
+        `UPDATE developer_points SET average_rating = $1 WHERE developer_id = $2`,
+        [parseFloat(avgRating).toFixed(2), ticket.resolved_by]
+      );
+      
+      await client.query('COMMIT');
+      
+      return {
+        ticket: rows[0],
+        pointsAwarded,
+        developerStats: pointsResult.rows[0]
+      };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      console.error('Error approving resolution:', error);
+      throw error;
+    } finally {
+      client.release();
+    }
+  },
+
+  /**
+   * Moderator/Admin rejects a ticket resolution
+   * @param {number} ticketId - Ticket ID
+   * @param {number} rejectorId - Moderator/Admin rejecting
+   * @param {string} reason - Reason for rejection
+   * @returns {Promise<Object>} Updated ticket
+   */
+  async rejectResolution(ticketId, rejectorId, reason) {
+    const client = await db.getClient();
+    try {
+      await client.query('BEGIN');
+      
+      // Get ticket details
+      const ticketQuery = `
+        SELECT id, solve_status 
+        FROM ticket 
+        WHERE id = $1
+      `;
+      const ticketResult = await client.query(ticketQuery, [ticketId]);
+      
+      if (ticketResult.rows.length === 0) {
+        throw new Error('Ticket not found');
+      }
+      
+      const ticket = ticketResult.rows[0];
+      
+      if (ticket.solve_status !== 'pending_approval') {
+        throw new Error('Ticket is not pending approval');
+      }
+      
+      // Update ticket - reset to not_solved
+      const updateQuery = `
+        UPDATE ticket 
+        SET solve_status = 'not_solved',
+            rejection_reason = $1,
+            resolved_by = NULL,
+            resolved_at = NULL
+        WHERE id = $2
+        RETURNING *
+      `;
+      
+      const { rows } = await client.query(updateQuery, [reason, ticketId]);
+      
+      await client.query('COMMIT');
+      return rows[0];
+    } catch (error) {
+      await client.query('ROLLBACK');
+      console.error('Error rejecting resolution:', error);
+      throw error;
+    } finally {
+      client.release();
+    }
+  },
+
+  /**
+   * Get tickets by approval status
+   * @param {string} status - Status to filter ('pending_approval', 'solved', 'not_solved')
+   * @returns {Promise<Array>} List of tickets
+   */
+  async getTicketsByApprovalStatus(status) {
+    try {
+      const query = `
+        SELECT t.*, array_agg(tp.name) as topics
+        FROM ticket t
+        LEFT JOIN ticket_topic tt ON t.id = tt.ticket_id
+        LEFT JOIN topic tp ON tt.topic_id = tp.id
+        WHERE t.solve_status = $1
+        GROUP BY t.id
+        ORDER BY t.resolved_at DESC
+      `;
+      
+      const { rows } = await db.query(query, [status]);
+      return rows;
+    } catch (error) {
+      console.error('Error getting tickets by approval status:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Get leaderboard of developers with their points and stats
+   * @param {number} limit - Number of top developers to return (default 50)
+   * @returns {Promise<Array>} Leaderboard data
+   */
+  async getLeaderboard(limit = 50) {
+    try {
+      const query = `
+        SELECT 
+          dp.developer_id,
+          dp.total_points,
+          dp.tickets_resolved,
+          dp.average_rating,
+          dp.last_updated
+        FROM developer_points dp
+        ORDER BY dp.total_points DESC, dp.tickets_resolved DESC
+        LIMIT $1
+      `;
+      
+      const { rows } = await db.query(query, [limit]);
+      return rows;
+    } catch (error) {
+      console.error('Error getting leaderboard:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Get developer statistics
+   * @param {number} developerId - Developer ID
+   * @returns {Promise<Object|null>} Developer stats or null
+   */
+  async getDeveloperStats(developerId) {
+    try {
+      const query = `
+        SELECT 
+          dp.developer_id,
+          dp.total_points,
+          dp.tickets_resolved,
+          dp.average_rating,
+          dp.last_updated,
+          dp.created_at,
+          (SELECT COUNT(*) FROM developer_points WHERE total_points > dp.total_points) + 1 as rank
+        FROM developer_points dp
+        WHERE dp.developer_id = $1
+      `;
+      
+      const { rows } = await db.query(query, [developerId]);
+      return rows.length > 0 ? rows[0] : null;
+    } catch (error) {
+      console.error('Error getting developer stats:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Awards points to a user (updates rank in userdb)
+   * @param {number} userId - User ID
+   * @param {number} points - Points to award
+   * @returns {Promise<void>}
+   */
+  async awardPoints(userId, points) {
+    try {
+      const query = `
+        UPDATE userdb.users
+        SET rank = COALESCE(rank, 0) + $1
+        WHERE id = $2
+      `;
+      
+      await db.query(query, [points, userId]);
+      console.log(`Awarded ${points} points to user ${userId}`);
+    } catch (error) {
+      console.error(`Error awarding points to user ${userId}:`, error);
       throw error;
     }
   }

@@ -2,7 +2,7 @@ const express = require('express');
 const { body } = require('express-validator');
 const userController = require('../controllers/userController');
 // Import the authentication middleware
-const { authenticateRequest, authorizeAdmin, authorizeOwnerOrAdmin } = require('../middleware/simplifiedAuthMiddleware');
+const { authenticateRequest, authorizeAdmin, authorizeModerator, authorizeOwnerOrAdmin } = require('../middleware/simplifiedAuthMiddleware');
 
 const router = express.Router();
 
@@ -21,8 +21,11 @@ router.patch('/internal/:userId/score', userController.updateUserScore);
 // Get leaderboard (public endpoint - no authentication required)
 router.get('/leaderboard', userController.getLeaderboard);
 
-// Get all users (admin only)
-router.get('/', authenticateRequest, authorizeAdmin, userController.getAllUsers);
+// Search users (authenticated users can search)
+router.get('/search', authenticateRequest, userController.searchUsers);
+
+// Get all users (moderator or admin)
+router.get('/', authenticateRequest, authorizeModerator, userController.getAllUsers);
 
 // Get a specific user by ID (admin or owner)
 router.get('/:userId', authenticateRequest, authorizeOwnerOrAdmin, userController.getUserById);

@@ -1,4 +1,4 @@
--- USERS Table (developers of the system)
+-- Users table
 CREATE TABLE users (
     id SERIAL PRIMARY KEY,
     name VARCHAR(50) NOT NULL,
@@ -10,7 +10,7 @@ CREATE TABLE users (
     role VARCHAR(20) NOT NULL DEFAULT 'developer' CHECK (role IN ('developer', 'moderator', 'admin'))
 );
 
--- USER_SKILLS Table (skills of the developers)
+-- User skills table
 CREATE TABLE user_skills (
     user_id INTEGER NOT NULL,
     skill VARCHAR(50) NOT NULL,
