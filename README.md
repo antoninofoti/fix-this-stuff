@@ -29,16 +29,34 @@ Fix This Stuff is a modern ticket management system built with a microservices a
 ### System Components
 
 ```
-┌─────────────┐     ┌──────────────┐     ┌─────────────────┐
-│  Frontend   │────>│ API Gateway  │────>│  Microservices  │
-│  (Vue.js)   │     │ (Spring Boot)│     │   (Node.js)     │
-└─────────────┘     └──────────────┘     └─────────────────┘
-                           │                       │
-                           v                       v
-                    ┌──────────────┐      ┌──────────────┐
-                    │  AuthFilter  │      │  PostgreSQL  │
-                    │  (JWT Verify)│      │  (Databases) │
-                    └──────────────┘      └──────────────┘
+                                    ┌───────────────────────┐
+                                    │   Frontend (Vue.js)   │
+                                    │   Nginx:80/Vite:5173  │
+                                    └───────────┬───────────┘
+                                                │
+                        ┌───────────────────────┼───────────────────────┐
+                        │                       │                       │
+                        v                       v                       v
+            ┌───────────────────┐   ┌───────────────────┐   ┌──────────────────┐
+            │   API Gateway     │   │   Comment API     │   │  Static Assets   │
+            │  Spring Boot:8081 │   │  Flask:5003       │   │  Nginx:80        │
+            └─────────┬─────────┘   └─────────┬─────────┘   └──────────────────┘
+                      │                       │
+        ┌─────────────┼─────────┬─────────────┼──────────┐
+        │             │         │             │          │
+        v             v         v             v          v
+┌──────────────┐ ┌─────────┐ ┌──────────────┐ ┌─────────────────┐
+│ Auth Service │ │  User   │ │   Ticket     │ │    Comments     │
+│  Node.js     │ │ Service │ │   Service    │ │    Consumer     │
+│  :3001       │ │ Node.js │ │   Node.js    │ │    Python       │
+│              │ │ :3002   │ │   :3003      │ │    RabbitMQ     │
+└──────┬───────┘ └────┬────┘ └──────┬───────┘ └────────┬────────┘
+       │              │             │                   │
+       v              v             v                   v
+┌──────────────┐ ┌─────────┐ ┌──────────────┐ ┌─────────────────┐
+│   authdb     │ │ userdb  │ │  ticketdb    │ │   RabbitMQ      │
+│  PostgreSQL  │ │ PostSQL │ │  PostgreSQL  │ │   Message Queue │
+└──────────────┘ └─────────┘ └──────────────┘ └─────────────────┘
 ```
 
 ### Microservices Architecture
@@ -46,9 +64,11 @@ Fix This Stuff is a modern ticket management system built with a microservices a
 The application follows a microservices pattern with service isolation:
 
 - **Separate databases** per service (authdb, userdb, ticketdb)
-- **API Gateway** for request routing and authentication
+- **API Gateway** for request routing and JWT authentication
 - **Service-to-service communication** via REST APIs
 - **Event-driven comments** using RabbitMQ message broker
+- **Resolution workflow** with peer review and point system
+- **Public leaderboard** ranking users by points earned
 
 ### Technology Stack
 
@@ -107,7 +127,8 @@ Manages user profiles, roles, and permissions.
 - Authorization checks
 
 **Database**: `userdb`
-- Table: `users` (id, email, name, surname, role, credentials_id)
+- Table: `users` (id, email, name, surname, role, rank, credentials_id)
+  - Note: `rank` field stores the total points/score earned by the user
 - Table: `user_skills` (user_id, skill)
 
 **API Endpoints:**
@@ -117,6 +138,9 @@ Manages user profiles, roles, and permissions.
 - `DELETE /api/users/:userId` - Delete user (admin only)
 - `GET /api/roles` - List available roles
 - `PUT /api/users/:userId/role` - Update user role (admin only)
+- `GET /api/users/leaderboard` - Get public leaderboard (no authentication required)
+- `PATCH /api/users/internal/:userId/rank` - Update user rank (internal)
+- `PATCH /api/users/internal/:userId/score` - Update user score (internal)
 
 ### Ticket Service (Port 3003)
 
@@ -133,6 +157,8 @@ Manages support tickets and topics.
 - Table: `topic` (id, name)
 - Table: `ticket_topic` (ticket_id, topic_id)
 - Table: `comment` (id, comment_text, author_id, ticket_id, creation_date)
+- Table: `developer_points` (developer_id, total_points, tickets_resolved, average_rating)
+- Table: `ticket_rating` (ticket_id, rating, comment, rated_by, rated_at)
 
 **API Endpoints:**
 - `GET /api/tickets` - List all tickets
@@ -140,6 +166,12 @@ Manages support tickets and topics.
 - `GET /api/tickets/:ticketId` - Get ticket details
 - `PUT /api/tickets/:ticketId` - Update ticket
 - `DELETE /api/tickets/:ticketId` - Delete ticket
+- `POST /api/tickets/:ticketId/request-resolution` - Request resolution approval
+- `POST /api/tickets/:ticketId/approve-resolution` - Approve resolution (moderators/admins)
+- `POST /api/tickets/:ticketId/reject-resolution` - Reject resolution (moderators/admins)
+- `GET /api/tickets/admin/pending-approval` - Get tickets pending approval
+- `POST /api/tickets/:ticketId/rating` - Rate a resolved ticket
+- `GET /api/tickets/:ticketId/rating` - Get ticket rating
 
 ### Comment API (Port 5003)
 
@@ -197,8 +229,11 @@ Vue.js single-page application with responsive design.
 **Features:**
 - User authentication (login/register)
 - Ticket browsing and creation
+- Ticket resolution workflow with peer review
 - User management (admin)
 - Role assignment
+- Points-based leaderboard
+- Pending approvals queue for moderators
 - Responsive Bootstrap UI
 
 **Routes:**
@@ -207,6 +242,60 @@ Vue.js single-page application with responsive design.
 - `/register` - User registration
 - `/tickets` - Ticket list
 - `/tickets/:id` - Ticket details
+- `/leaderboard` - Public leaderboard
+- `/pending-approvals` - Pending resolution approvals (moderators/admins)
+- `/profile` - User profile
+- `/admin` - Admin panel (admins/moderators)
+
+## Resolution Workflow & Leaderboard
+
+### Ticket Resolution Process
+
+The system implements a peer-review resolution workflow to ensure quality and prevent self-approval:
+
+1. **Assignment**: Any authenticated user can self-assign to an open ticket
+2. **Implementation**: User works on the resolution
+3. **Request Approval**: User submits resolution via `POST /api/tickets/:id/request-resolution`
+   - Ticket `solve_status` changes to `pending_approval`
+   - Records `resolved_by` (user ID) and `resolved_at` (timestamp)
+4. **Peer Review**: Another moderator or administrator reviews the resolution
+5. **Decision**:
+   - **Approved**: Points automatically awarded based on priority and rating
+   - **Rejected**: User can resubmit after modifications
+
+### Anti-Self-Approval Rule
+
+A critical constraint ensures fairness:
+- Users cannot approve tickets they resolved themselves
+- The `resolved_by` user ID must differ from `approved_by` user ID
+- Requires peer review for all resolutions
+
+### Point System
+
+**Base Points by Priority:**
+- High priority: 10 points
+- Medium priority: 5 points
+- Low priority: 2 points
+
+**Rating Bonus:**
+When the ticket requester rates the resolution (1-5 stars):
+- Bonus = rating × 2
+- Total Points = Base Points + Rating Bonus
+
+**Example:**
+- Medium priority ticket (5 points) + 5-star rating (10 bonus) = 15 total points
+
+### Leaderboard
+
+The public leaderboard ranks all users by total points earned:
+- Accessible at `/leaderboard` (no authentication required)
+- Displays rank, name, total points, tickets resolved, and average rating
+- Updated automatically when resolutions are approved
+- Endpoint: `GET /api/users/leaderboard`
+
+## Authentication & Security
+
+```
 
 ## Authentication & Security
 
@@ -326,18 +415,27 @@ Complete API documentation is available in [documentation/API.md](documentation/
 - `GET /api/tickets/:id` - Get ticket details
 - `PUT /api/tickets/:id` - Update ticket
 - `DELETE /api/tickets/:id` - Delete ticket
+- `POST /api/tickets/:id/request-resolution` - Request resolution approval
+- `POST /api/tickets/:id/approve-resolution` - Approve resolution (moderators)
+- `POST /api/tickets/:id/reject-resolution` - Reject resolution (moderators)
+- `GET /api/tickets/admin/pending-approval` - Get pending approvals
 
 **Users:**
 - `GET /api/users` - List users (admin/moderator)
 - `GET /api/users/:id` - Get user details
 - `PUT /api/users/:id` - Update user profile
 - `PUT /api/users/:id/role` - Update user role (admin)
+- `GET /api/users/leaderboard` - Get public leaderboard
 
 **Comments:**
 - `GET /tickets/:ticketId/comments` - List comments
 - `POST /comments` - Create comment
 - `PUT /comments/:commentId` - Update comment
 - `DELETE /comments/:commentId` - Delete comment
+
+**Ratings:**
+- `POST /api/tickets/:id/rating` - Rate a ticket
+- `GET /api/tickets/:id/rating` - Get ticket rating
 
 ## Development Guide
 
@@ -472,7 +570,7 @@ For comprehensive troubleshooting, see [documentation/TROUBLESHOOTING.md](docume
 
 ## Documentation
 
-Comprehensive documentation is available in the `/documentation` directory:
+Comprehensive documentation is available in the [`/documentation`](documentation/) directory:
 
 - **[API.md](documentation/API.md)**: Complete API endpoint documentation
 - **[ARCHITECTURE.md](documentation/ARCHITECTURE.md)**: System design and component interaction
@@ -481,6 +579,15 @@ Comprehensive documentation is available in the `/documentation` directory:
 - **[SECURITY.md](documentation/SECURITY.md)**: Authentication and authorization details
 - **[TROUBLESHOOTING.md](documentation/TROUBLESHOOTING.md)**: Common issues and solutions
 - **[TICKET_RESOLUTION_WORKFLOW.md](documentation/TICKET_RESOLUTION_WORKFLOW.md)**: Resolution workflow specification
+- **[IMPLEMENTATION_SUMMARY.md](documentation/IMPLEMENTATION_SUMMARY.md)**: Feature implementation overview
+
+### Additional Resources
+
+- **[UserStories.xlsx](documentation/UserStories.xlsx)**: User stories and requirements
+- **[FunctionPointsAnalysis.xlsx](documentation/FunctionPointsAnalysis.xlsx)**: Function points analysis
+- **[FixThisStuff_Mockups.pdf](documentation/FixThisStuff_Mockups.pdf)**: UI mockups and designs
+- **[CocomoII.png](documentation/CocomoII.png)**: COCOMO II cost estimation
+- **[DataMetrics.json](documentation/DataMetrics.json)**: Project metrics and statistics
 
 ## Project Status
 
@@ -494,14 +601,19 @@ Comprehensive documentation is available in the `/documentation` directory:
 - Backend comment system with RabbitMQ (100%)
 - Frontend authentication and user management (100%)
 - Frontend ticket management (100%)
+- Ticket resolution workflow with peer review (100%)
+- Points-based leaderboard system (100%)
+- Pending approvals queue for moderators (100%)
+- Ticket rating system (100%)
 - Docker containerization (100%)
 
 ### Known Limitations
 
 1. **Real-time Notifications**: Not implemented (could use WebSockets with RabbitMQ)
 2. **File Attachments**: Not supported for tickets or comments
-3. **Email Notifications**: Not implemented
+3. **Email Notifications**: Not implemented for ticket updates or approvals
 4. **Audit Logging**: Limited logging of user actions
+5. **Advanced Search**: Basic search functionality only
 
 ## License
 

@@ -103,7 +103,7 @@ High-level overview of the ticket resolution system and leaderboard implementati
 **Use when:** Understanding the resolution workflow feature, reviewing implementation decisions, or planning similar features.
 
 ### [TICKET_RESOLUTION_WORKFLOW.md](TICKET_RESOLUTION_WORKFLOW.md)
-Detailed specification of the ticket resolution approval process and developer points system.
+Detailed specification of the ticket resolution approval process and points system.
 
 **Contents:**
 - Resolution workflow state diagram
@@ -114,6 +114,16 @@ Detailed specification of the ticket resolution approval process and developer p
 - Integration with existing ticket lifecycle
 
 **Use when:** Understanding the resolution approval process, implementing workflow changes, or troubleshooting resolution issues.
+
+### Additional Resources
+
+The documentation directory also contains supplementary materials:
+
+- **[UserStories.xlsx](UserStories.xlsx)**: Comprehensive user stories and requirements documentation
+- **[FunctionPointsAnalysis.xlsx](FunctionPointsAnalysis.xlsx)**: Function points analysis for project estimation
+- **[FixThisStuff_Mockups.pdf](FixThisStuff_Mockups.pdf)**: UI/UX mockups and design specifications
+- **[CocomoII.png](CocomoII.png)**: COCOMO II software cost estimation diagram
+- **[DataMetrics.json](DataMetrics.json)**: Project metrics and statistical data
 
 ## Quick Start Guide
 

@@ -3,16 +3,34 @@
 ## System Components
 
 ```
-┌─────────────┐     ┌──────────────┐     ┌─────────────────┐
-│  Frontend   │────>│ API Gateway  │────>│  Microservices  │
-│  (Vue.js)   │     │ (Spring Boot)│     │   (Node.js)     │
-└─────────────┘     └──────────────┘     └─────────────────┘
-                           │                       │
-                           v                       v
-                    ┌──────────────┐      ┌──────────────┐
-                    │  AuthFilter  │      │  PostgreSQL  │
-                    │  (JWT Verify)│      │  (Databases) │
-                    └──────────────┘      └──────────────┘
+                                    ┌───────────────────────┐
+                                    │   Frontend (Vue.js)   │
+                                    │   Nginx:80/Vite:5173  │
+                                    └───────────┬───────────┘
+                                                │
+                        ┌───────────────────────┼───────────────────────┐
+                        │                       │                       │
+                        v                       v                       v
+            ┌───────────────────┐   ┌───────────────────┐   ┌──────────────────┐
+            │   API Gateway     │   │   Comment API     │   │  Static Assets   │
+            │  Spring Boot:8081 │   │  Flask:5003       │   │  Nginx:80        │
+            └─────────┬─────────┘   └─────────┬─────────┘   └──────────────────┘
+                      │                       │
+        ┌─────────────┼─────────┬─────────────┼──────────┐
+        │             │         │             │          │
+        v             v         v             v          v
+┌──────────────┐ ┌─────────┐ ┌──────────────┐ ┌─────────────────┐
+│ Auth Service │ │  User   │ │   Ticket     │ │    Comments     │
+│  Node.js     │ │ Service │ │   Service    │ │    Consumer     │
+│  :3001       │ │ Node.js │ │   Node.js    │ │    Python       │
+│              │ │ :3002   │ │   :3003      │ │    RabbitMQ     │
+└──────┬───────┘ └────┬────┘ └──────┬───────┘ └────────┬────────┘
+       │              │             │                   │
+       v              v             v                   v
+┌──────────────┐ ┌─────────┐ ┌──────────────┐ ┌─────────────────┐
+│   authdb     │ │ userdb  │ │  ticketdb    │ │   RabbitMQ      │
+│  PostgreSQL  │ │ PostSQL │ │  PostgreSQL  │ │   Message Queue │
+└──────────────┘ └─────────┘ └──────────────┘ └─────────────────┘
 ```
 
 ## Microservices Architecture
@@ -20,9 +38,11 @@
 The application follows a microservices pattern with service isolation:
 
 - **Separate databases** per service (authdb, userdb, ticketdb)
-- **API Gateway** for request routing and authentication
+- **API Gateway** for request routing and JWT authentication
 - **Service-to-service communication** via REST APIs
 - **Event-driven comments** using RabbitMQ message broker
+- **Resolution workflow** with peer review and point system
+- **Public leaderboard** ranking users by points earned
 
 ## Technology Stack
 
@@ -72,9 +92,11 @@ Manages user profiles, roles, and permissions.
 - Role management (developer, moderator, admin)
 - User skills tracking
 - Authorization checks
+- Leaderboard management
 
 **Database**: `userdb`
 - Table: `users` (id, name, surname, email, rank, registration_date, credentials_id, role)
+  - Note: `rank` field stores the total points/score earned by the user
 - Table: `user_skills` (user_id, skill)
 
 ### Ticket Service (Port 3003)
@@ -84,14 +106,19 @@ Manages support tickets and topics.
 **Responsibilities:**
 - Ticket CRUD operations
 - Priority and status management
-- Ticket assignment to developers
+- Ticket assignment to users
 - Topic categorization
+- Resolution workflow management
+- Point calculation and awarding
+- Ticket rating system
 
 **Database**: `ticketdb`
-- Table: `ticket` (id, title, priority, opening_date, deadline_date, flag_status, solve_status. request, answer, request_author_id, assigned_developer_id, system_id)
+- Table: `ticket` (id, title, priority, opening_date, deadline_date, flag_status, solve_status, request, answer, request_author_id, assigned_developer_id, system_id, resolved_by, resolved_at, approved_by, approval_date, rejection_reason)
 - Table: `topic` (id, name)
 - Table: `ticket_topic` (ticket_id, topic_id)
 - Table: `comment` (id, comment_text, author_id, ticket_id, creation_date)
+- Table: `developer_points` (id, developer_id, total_points, tickets_resolved, average_rating, last_updated, created_at)
+- Table: `ticket_rating` (id, ticket_id, rating, comment, rated_by, rated_at)
 
 ### Comment API (Port 5003)
 
@@ -150,8 +177,11 @@ Vue.js single-page application with responsive design.
 **Features:**
 - User authentication (login/register)
 - Ticket browsing and creation
+- Ticket resolution workflow with peer review
 - User management (admin)
 - Role assignment
+- Points-based leaderboard
+- Pending approvals queue for moderators
 - Responsive Bootstrap UI
 
 **Routes:**
@@ -162,9 +192,8 @@ Vue.js single-page application with responsive design.
 - `/tickets/:id` - Ticket details
 - `/profile` - User profile
 - `/admin` - Admin dashboard (admin only)
-- `/leaderboard` - Developer leaderboard
+- `/leaderboard` - Public leaderboard
 - `/pending-approvals` - Resolution approvals (moderator/admin only)
-- `/users/search` - User search (admin/moderator only)
 
 ## Communication Patterns
 
@@ -284,6 +313,102 @@ Each Node.js service maintains its own connection pool:
 - Maximum connections: 10
 - Idle timeout: 30 seconds
 - Connection timeout: 10 seconds
+
+## Resolution Workflow Architecture
+
+### Ticket Resolution States
+
+The system implements a three-state resolution workflow:
+
+1. **not_solved**: Ticket has not been resolved
+2. **pending_approval**: User has submitted resolution, awaiting peer review
+3. **solved**: Resolution has been approved and points awarded
+
+### Resolution Process Flow
+
+```
+┌─────────────┐
+│  User       │
+│  Assigns    │
+│  Ticket     │
+└──────┬──────┘
+       │
+       v
+┌─────────────────────┐
+│  User Implements    │
+│  Solution           │
+└──────┬──────────────┘
+       │
+       v
+┌─────────────────────┐     Request Resolution
+│  POST /tickets/:id/ │ ───────────────────────────┐
+│  request-resolution │                            │
+└─────────────────────┘                            │
+                                                   v
+                                    ┌──────────────────────────┐
+                                    │  solve_status =          │
+                                    │  pending_approval        │
+                                    │  resolved_by = user_id   │
+                                    │  resolved_at = timestamp │
+                                    └──────────┬───────────────┘
+                                               │
+                       ┌───────────────────────┼───────────────────────┐
+                       │                       │                       │
+                       v                       v                       v
+            ┌──────────────────┐    ┌──────────────────┐    ┌──────────────────┐
+            │  Moderator/Admin │    │  Moderator/Admin │    │  User can        │
+            │  Approves        │    │  Rejects         │    │  modify and      │
+            │  Resolution      │    │  Resolution      │    │  resubmit        │
+            └────────┬─────────┘    └────────┬─────────┘    └──────────────────┘
+                     │                       │
+                     v                       v
+          ┌──────────────────┐    ┌──────────────────┐
+          │  solve_status =  │    │  solve_status =  │
+          │  solved          │    │  not_solved      │
+          │  approved_by     │    │  rejection_reason│
+          │  Points awarded  │    │  Fields cleared  │
+          └──────────────────┘    └──────────────────┘
+```
+
+### Anti-Self-Approval Constraint
+
+A critical business rule enforced at the database and application level:
+
+- `resolved_by` user ID must differ from `approved_by` user ID
+- Prevents users from approving their own work
+- Ensures peer review quality control
+- Maintained through application logic validation
+
+### Point Calculation System
+
+Points are calculated and awarded automatically upon approval:
+
+```javascript
+Base Points:
+  - high priority: 10 points
+  - medium priority: 5 points
+  - low priority: 2 points
+
+Rating Bonus:
+  - If ticket rated: rating × 2
+
+Total Points = Base Points + Rating Bonus
+```
+
+**Example:**
+- Medium priority ticket (5 points)
+- User receives 5-star rating (10 bonus points)
+- Total awarded: 15 points
+
+### Leaderboard System
+
+The leaderboard is maintained in the `userdb.users` table:
+
+- **score**: Total points earned
+- **rank**: Calculated rank (Bronze, Silver, Gold, Platinum)
+- Updated automatically when resolutions are approved
+- Public endpoint: `GET /api/users/leaderboard`
+- No authentication required for viewing
 
 ## Scalability Considerations
 

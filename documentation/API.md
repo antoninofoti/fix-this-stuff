@@ -507,46 +507,51 @@ Authorization: Bearer <token> (moderator or admin)
 ## Leaderboard Endpoints
 
 ### Get Leaderboard
-Public endpoint showing top developers by points. Only developers appear in leaderboard.
+Public endpoint showing top users by points. All authenticated users (developers, moderators, admins) can earn points and appear in the leaderboard.
 
 ```bash
-GET /api/tickets/leaderboard/top?limit=50
+GET /api/users/leaderboard?limit=50
 ```
 
 **Query Parameters:**
-- `limit` (optional, default: 50): Number of top developers to return
+- `limit` (optional, default: 10): Number of top users to return
+
+**Authentication:** Not required (public endpoint)
 
 **Response:**
 ```json
 {
   "leaderboard": [
     {
-      "rank": 1,
-      "developer_id": 42,
-      "name": "Mario Rossi",
-      "total_points": 145,
-      "tickets_resolved": 12,
-      "average_rating": 4.25,
-      "last_updated": "2025-11-07T10:30:00.000Z"
+      "position": 1,
+      "id": 42,
+      "name": "Mario",
+      "surname": "Rossi",
+      "email": "mario.rossi@example.com",
+      "role": "developer",
+      "rank": 145,
+      "registration_date": "2025-10-01T08:00:00.000Z"
     },
     {
-      "rank": 2,
-      "developer_id": 38,
-      "name": "Laura Bianchi",
-      "total_points": 132,
-      "tickets_resolved": 15,
-      "average_rating": 3.87,
-      "last_updated": "2025-11-06T18:20:00.000Z"
+      "position": 2,
+      "id": 38,
+      "name": "Laura",
+      "surname": "Bianchi",
+      "email": "laura.bianchi@example.com",
+      "role": "moderator",
+      "rank": 132,
+      "registration_date": "2025-09-15T10:20:00.000Z"
     }
-  ]
+  ],
+  "count": 2
 }
 ```
 
 **Notes:**
 - Leaderboard is public (no authentication required)
-- Only developers with `role='developer'` appear
-- Moderators and admins do NOT appear in leaderboard
-- Ordered by `total_points DESC`, then `tickets_resolved DESC`
+- All authenticated users can earn points and appear in the leaderboard
+- Ordered by `rank DESC` (where rank represents total points/score)
+- Position is calculated based on ranking (1st, 2nd, 3rd, etc.)
 
 ### Get Developer Statistics
 Get detailed statistics for a specific developer.
@@ -575,6 +580,73 @@ GET /api/tickets/developers/:developerId/stats
 **Notes:**
 - Public endpoint (no authentication required)
 - Returns 404 if developer has no resolved tickets yet
+
+## Ticket Rating Endpoints
+
+### Rate a Ticket
+Allows the ticket requester to rate a resolved ticket.
+
+```bash
+POST /api/tickets/:ticketId/rating
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "rating": 5,
+  "comment": "Excellent solution, fixed the issue completely!"
+}
+```
+
+**Required Fields:**
+- `rating` (integer): Rating from 1 (poor) to 5 (excellent)
+- `comment` (string, optional): Additional feedback
+
+**Requirements:**
+- User must be authenticated
+- User should be the ticket requester
+- Ticket must be solved
+
+**Response:**
+```json
+{
+  "message": "Rating submitted successfully",
+  "rating": {
+    "id": 12,
+    "ticket_id": 5,
+    "rating": 5,
+    "comment": "Excellent solution, fixed the issue completely!",
+    "rated_by": 3,
+    "rated_at": "2025-11-07T16:00:00.000Z"
+  }
+}
+```
+
+### Get Ticket Rating
+Retrieve the rating for a specific ticket.
+
+```bash
+GET /api/tickets/:ticketId/rating
+```
+
+**Authentication:** Not required
+
+**Response:**
+```json
+{
+  "rating": {
+    "id": 12,
+    "ticket_id": 5,
+    "rating": 5,
+    "comment": "Excellent solution, fixed the issue completely!",
+    "rated_by": 3,
+    "rated_at": "2025-11-07T16:00:00.000Z"
+  }
+}
+```
+
+**Notes:**
+- Returns 404 if ticket has not been rated
+- Rating affects bonus points awarded to the resolver
 
 ## Ticket States
 
