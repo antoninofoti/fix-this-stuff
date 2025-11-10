@@ -8,6 +8,7 @@ export const useAuthStore = defineStore('auth', {
     email: localStorage.getItem('email') || null,
     role: localStorage.getItem('role') || 'guest',
     user: null, // Full user object with score
+    profileRefreshInterval: null, // Interval ID for periodic profile refresh
   }),
   getters: {
     isAuthenticated: (state) => !!state.token,
@@ -40,6 +41,8 @@ export const useAuthStore = defineStore('auth', {
       // Fetch full user profile to get score
       if (user?.id) {
         await this.fetchUserProfile()
+        // Start periodic profile refresh after successful login
+        this.startProfileRefresh()
       }
       
       return data
@@ -53,7 +56,31 @@ export const useAuthStore = defineStore('auth', {
         console.error('Error fetching user profile:', error)
       }
     },
+    // Start periodic profile refresh to keep score updated
+    startProfileRefresh() {
+      // Don't start if already running or user not authenticated
+      if (this.profileRefreshInterval || !this.userId) {
+        return
+      }
+      
+      // Refresh profile every 30 seconds
+      this.profileRefreshInterval = setInterval(() => {
+        if (this.isAuthenticated && this.userId) {
+          this.fetchUserProfile()
+        } else {
+          this.stopProfileRefresh()
+        }
+      }, 30000) // 30 seconds
+    },
+    // Stop periodic profile refresh
+    stopProfileRefresh() {
+      if (this.profileRefreshInterval) {
+        clearInterval(this.profileRefreshInterval)
+        this.profileRefreshInterval = null
+      }
+    },
     logout() {
+      this.stopProfileRefresh()
       this.token = null
       this.userId = null
       this.email = null

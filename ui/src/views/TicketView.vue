@@ -769,6 +769,9 @@ const approveTicketResolution = async () => {
       : 'Resolution approved! Points have been awarded to the developer. Ticket remains open.'
     alert(resultMessage)
     await fetchTicket(props.ticketId)
+    
+    // Refresh user profile to get updated score (in case the approver is viewing their own resolved ticket)
+    await authStore.fetchUserProfile()
   } catch (error) {
     console.error('Error approving resolution:', error)
     approvalError.value = error.response?.data?.error || 'Failed to approve resolution'

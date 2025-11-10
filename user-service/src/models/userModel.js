@@ -15,7 +15,7 @@ const UserModel = {
     try {
       // Base query
       let query = `
-        SELECT u.id, u.email, u.name, u.surname, u.role, u.registration_date as created_at, u.registration_date as updated_at
+        SELECT u.id, u.email, u.name, u.surname, u.role, u.rank, u.registration_date as created_at, u.registration_date as updated_at
         FROM users u
       `;
 
@@ -59,7 +59,7 @@ const UserModel = {
   async getUserById(userId) {
     try {
       const query = `
-        SELECT u.id, u.email, u.name, u.surname, u.role, u.registration_date as created_at, u.registration_date as updated_at
+        SELECT u.id, u.email, u.name, u.surname, u.role, u.rank, u.registration_date as created_at, u.registration_date as updated_at
         FROM users u
         WHERE u.id = $1
       `;
