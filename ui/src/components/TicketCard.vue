@@ -45,7 +45,7 @@
 
     <div class="ticket-card-footer">
       <button class="view-details-btn">
-        Vedi Dettagli <i class="bi bi-arrow-right"></i>
+        View Details <i class="bi bi-arrow-right"></i>
       </button>
     </div>
   </div>
