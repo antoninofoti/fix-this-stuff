@@ -28,35 +28,56 @@ Fix This Stuff is a modern ticket management system built with a microservices a
 
 ### System Components
 
-```
-                                    ┌───────────────────────┐
-                                    │   Frontend (Vue.js)   │
-                                    │   Nginx:80/Vite:5173  │
-                                    └───────────┬───────────┘
-                                                │
-                        ┌───────────────────────┼───────────────────────┐
-                        │                       │                       │
-                        v                       v                       v
-            ┌───────────────────┐   ┌───────────────────┐   ┌──────────────────┐
-            │   API Gateway     │   │   Comment API     │   │  Static Assets   │
-            │  Spring Boot:8081 │   │  Flask:5003       │   │  Nginx:80        │
-            └─────────┬─────────┘   └─────────┬─────────┘   └──────────────────┘
-                      │                       │
-        ┌─────────────┼─────────┬─────────────┼──────────┐
-        │             │         │             │          │
-        v             v         v             v          v
-┌──────────────┐ ┌─────────┐ ┌──────────────┐ ┌─────────────────┐
-│ Auth Service │ │  User   │ │   Ticket     │ │    Comments     │
-│  Node.js     │ │ Service │ │   Service    │ │    Consumer     │
-│  :3001       │ │ Node.js │ │   Node.js    │ │    Python       │
-│              │ │ :3002   │ │   :3003      │ │    RabbitMQ     │
-└──────┬───────┘ └────┬────┘ └──────┬───────┘ └────────┬────────┘
-       │              │             │                   │
-       v              v             v                   v
-┌──────────────┐ ┌─────────┐ ┌──────────────┐ ┌─────────────────┐
-│   authdb     │ │ userdb  │ │  ticketdb    │ │   RabbitMQ      │
-│  PostgreSQL  │ │ PostSQL │ │  PostgreSQL  │ │   Message Queue │
-└──────────────┘ └─────────┘ └──────────────┘ └─────────────────┘
+```mermaid
+graph TD
+    Frontend["Frontend (Vue.js)<br/>Nginx:80/Vite:5173"]
+    Gateway["API Gateway<br/>Spring Boot:8081"]
+    StaticAssets["Static Assets<br/>Nginx:80"]
+    
+    AuthService["Auth Service<br/>Node.js:3001"]
+    UserService["User Service<br/>Node.js:3002"]
+    TicketService["Ticket Service<br/>Node.js:3003"]
+    CommentAPI["Comment API<br/>Flask:5003"]
+    
+    AuthDB[("authdb<br/>PostgreSQL:5432")]
+    UserDB[("userdb<br/>PostgreSQL:5432")]
+    TicketDB[("ticketdb<br/>PostgreSQL:5432")]
+    
+    RabbitMQ[("RabbitMQ:5672<br/>Message Queue")]
+    Consumer["Comments Consumer<br/>Python"]
+    
+    Frontend --> Gateway
+    
+    Gateway --> AuthService
+    Gateway --> UserService
+    Gateway --> TicketService
+    
+    AuthService --> AuthDB
+    UserService --> UserDB
+    TicketService --> TicketDB
+    
+    Gateway --> CommentAPI
+    CommentAPI --> RabbitMQ
+    RabbitMQ --> Consumer
+    Consumer --> TicketDB
+    
+    Frontend -.-> StaticAssets
+    
+    classDef frontend fill:#e1f5ff,stroke:#01579b,stroke-width:2px
+    classDef gateway fill:#fff3e0,stroke:#e65100,stroke-width:2px
+    classDef static fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
+    classDef nodeService fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px
+    classDef pythonService fill:#fff9c4,stroke:#f57f17,stroke-width:2px
+    classDef database fill:#e3f2fd,stroke:#0d47a1,stroke-width:2px
+    classDef queue fill:#fce4ec,stroke:#880e4f,stroke-width:2px
+    
+    class Frontend frontend
+    class Gateway gateway
+    class StaticAssets static
+    class AuthService,UserService,TicketService nodeService
+    class CommentAPI,Consumer pythonService
+    class AuthDB,UserDB,TicketDB database
+    class RabbitMQ queue
 ```
 
 ### Microservices Architecture
