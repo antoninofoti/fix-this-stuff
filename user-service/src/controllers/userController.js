@@ -6,10 +6,8 @@ const userModel = require('../models/userModel');
  */
 const getAllUsers = async (req, res) => {
   try {
-    // Only admin users should be able to get all users
-    if (req.user.role !== 'admin') {
-      return res.status(403).json({ message: 'Requires admin privileges' });
-    }
+    // Moderators and admins can get all users (already checked by middleware)
+    // No need for additional role check here since authorizeModerator middleware handles it
     
     const users = await userModel.getAllUsers();
     

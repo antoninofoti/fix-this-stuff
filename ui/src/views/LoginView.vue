@@ -122,12 +122,22 @@ const handleLogin = async () => {
     await authStore.login({ email: email.value, password: password.value })
     router.push('/')
   } catch (err) {
-    const msg =
-      err?.response?.data?.message ||
-      (Array.isArray(err?.response?.data?.errors) && err.response.data.errors.map(e => e.msg).join(', ')) ||
-      err?.message ||
-      'Error during login. Please try again.'
-    error.value = msg
+    // Handle different error cases
+    if (err?.response?.status === 401) {
+      // Unauthorized - wrong credentials
+      error.value = err?.response?.data?.message || 'Invalid email or password. Please check your credentials and try again.'
+    } else if (err?.response?.status === 400) {
+      // Bad request - validation errors
+      const validationErrors = err?.response?.data?.errors
+      if (Array.isArray(validationErrors)) {
+        error.value = validationErrors.map(e => e.msg).join(', ')
+      } else {
+        error.value = err?.response?.data?.message || 'Invalid input. Please check your credentials.'
+      }
+    } else {
+      // Other errors
+      error.value = err?.response?.data?.message || err?.message || 'An error occurred during login. Please try again.'
+    }
   } finally {
     isLoading.value = false
   }

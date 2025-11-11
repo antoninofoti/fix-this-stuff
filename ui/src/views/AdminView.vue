@@ -189,8 +189,14 @@
                   <td>{{ ticket.title }}</td>
                   <td>{{ ticket.creator_id }}</td>
                   <td>
-                    <span :class="['badge', getStatusBadgeClass(ticket.status)]">
-                      {{ ticket.status }}
+                    <span :class="['badge', getStatusBadgeClass(ticket.flag_status)]">
+                      {{ ticket.flag_status }}
+                    </span>
+                    <span v-if="ticket.solve_status === 'pending_approval'" class="badge bg-warning ms-1">
+                      Pending Approval
+                    </span>
+                    <span v-else-if="ticket.solve_status === 'solved'" class="badge bg-success ms-1">
+                      Solved
                     </span>
                   </td>
                   <td>
@@ -198,7 +204,7 @@
                       {{ ticket.priority }}
                     </span>
                   </td>
-                  <td>{{ formatDate(ticket.created_at) }}</td>
+                  <td>{{ formatDate(ticket.creation_date || ticket.created_at) }}</td>
                   <td>
                     <button 
                       class="btn btn-sm btn-outline-primary"
@@ -207,7 +213,7 @@
                       <i class="bi bi-eye"></i> View
                     </button>
                     <button 
-                      v-if="ticket.status !== 'closed'"
+                      v-if="ticket.flag_status !== 'closed'"
                       class="btn btn-sm btn-outline-danger ms-1"
                       @click="closeTicket(ticket.id)"
                     >
@@ -395,8 +401,17 @@ const filteredUsers = computed(() => {
 
 const filteredTickets = computed(() => {
   if (ticketFilter.value === 'all') return tickets.value
+  
+  if (ticketFilter.value === 'pending') {
+    // Filter by solve_status = 'pending_approval'
+    return tickets.value.filter(ticket => 
+      ticket.solve_status === 'pending_approval'
+    )
+  }
+  
+  // Filter by flag_status for 'open' and 'closed'
   return tickets.value.filter(ticket => 
-    ticket.status?.toLowerCase() === ticketFilter.value.toLowerCase()
+    ticket.flag_status?.toLowerCase() === ticketFilter.value.toLowerCase()
   )
 })
 
@@ -424,7 +439,8 @@ const fetchTickets = async () => {
     const response = await ticketApi.get('/')
     tickets.value = response.data.tickets || []
     stats.value.totalTickets = tickets.value.length
-    stats.value.pendingTickets = tickets.value.filter(t => t.status !== 'closed').length
+    // Count tickets with solve_status = 'pending_approval'
+    stats.value.pendingTickets = tickets.value.filter(t => t.solve_status === 'pending_approval').length
   } catch (error) {
     console.error('Error fetching tickets:', error)
   } finally {
@@ -502,15 +518,16 @@ const closeTicket = async (ticketId) => {
   
   try {
     await ticketApi.put(`/${ticketId}/admin`, {
-      status: 'closed',
-      solved: true
+      flag_status: 'closed',
+      solve_status: 'not_solved'
     })
     
     // Refresh tickets
     await fetchTickets()
+    alert('Ticket closed successfully')
   } catch (error) {
     console.error('Error closing ticket:', error)
-    alert('Failed to close ticket')
+    alert('Failed to close ticket: ' + (error.response?.data?.message || error.message))
   }
 }
 
