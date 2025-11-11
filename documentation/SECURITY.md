@@ -45,20 +45,6 @@ Frontend                API Gateway              Microservices
 - X-Internal-Auth flag for service-to-service verification
 - Original Authorization header removed
 
-### Direct Service Access (Comment API)
-
-The Comment API is accessed directly by the frontend (not through the gateway):
-
-- Write operations (POST, PUT, DELETE) require JWT authentication
-- Read operations (GET) are public for performance
-- JWT validation performed by calling Auth Service
-- Authorization checks ensure users can only modify their own comments
-
-**Security Considerations:**
-- Comment API exposed on port 5003 requires proper firewall configuration in production
-- Rate limiting should be implemented at the infrastructure level
-- Consider adding API Gateway routing for Comment API in production for additional security layer
-
 ### Database Security
 
 - Passwords hashed with bcrypt (10 rounds)
