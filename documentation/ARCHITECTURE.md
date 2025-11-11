@@ -4,7 +4,7 @@
 
 ```mermaid
 graph TD
-    Frontend["Frontend<br/>Vue.js (Browser)"]
+    Frontend["Frontend<br/>Vue.js:5173 (Browser)"]
     Nginx["Web Server<br/>Nginx:80"]
     Gateway["API Gateway<br/>Spring Boot:8081"]
     
