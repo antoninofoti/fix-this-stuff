@@ -2,35 +2,52 @@
 
 ## System Components
 
-```
-                                    ┌───────────────────────┐
-                                    │   Frontend (Vue.js)   │
-                                    │   Nginx:80/Vite:5173  │
-                                    └───────────┬───────────┘
-                                                │
-                        ┌───────────────────────┼───────────────────────┐
-                        │                       │                       │
-                        v                       v                       v
-            ┌───────────────────┐   ┌───────────────────┐   ┌──────────────────┐
-            │   API Gateway     │   │   Comment API     │   │  Static Assets   │
-            │  Spring Boot:8081 │   │  Flask:5003       │   │  Nginx:80        │
-            └─────────┬─────────┘   └─────────┬─────────┘   └──────────────────┘
-                      │                       │
-        ┌─────────────┼─────────┬─────────────┼──────────┐
-        │             │         │             │          │
-        v             v         v             v          v
-┌──────────────┐ ┌─────────┐ ┌──────────────┐ ┌─────────────────┐
-│ Auth Service │ │  User   │ │   Ticket     │ │    Comments     │
-│  Node.js     │ │ Service │ │   Service    │ │    Consumer     │
-│  :3001       │ │ Node.js │ │   Node.js    │ │    Python       │
-│              │ │ :3002   │ │   :3003      │ │    RabbitMQ     │
-└──────┬───────┘ └────┬────┘ └──────┬───────┘ └────────┬────────┘
-       │              │             │                   │
-       v              v             v                   v
-┌──────────────┐ ┌─────────┐ ┌──────────────┐ ┌─────────────────┐
-│   authdb     │ │ userdb  │ │  ticketdb    │ │   RabbitMQ      │
-│  PostgreSQL  │ │ PostSQL │ │  PostgreSQL  │ │   Message Queue │
-└──────────────┘ └─────────┘ └──────────────┘ └─────────────────┘
+```mermaid
+graph TD
+    Frontend["Frontend (Vue.js)<br/>Nginx:80/Vite:5173"]
+    Gateway["API Gateway<br/>Spring Boot:8081"]
+    StaticAssets["Static Assets<br/>Nginx:80"]
+    
+    AuthService["Auth Service<br/>Node.js:3001"]
+    UserService["User Service<br/>Node.js:3002"]
+    TicketService["Ticket Service<br/>Node.js:3003"]
+    CommentAPI["Comment API<br/>Flask:5003"]
+    
+    AuthDB[("authdb<br/>PostgreSQL")]
+    UserDB[("userdb<br/>PostgreSQL")]
+    TicketDB[("ticketdb<br/>PostgreSQL")]
+    
+    RabbitMQ[("RabbitMQ<br/>Message Queue")]
+    Consumer["Comments Consumer<br/>Python"]
+    
+    Frontend --> Gateway
+    Frontend --> StaticAssets
+    
+    Gateway --> AuthService
+    Gateway --> UserService
+    Gateway --> TicketService
+    Gateway --> CommentAPI
+    
+    AuthService --> AuthDB
+    UserService --> UserDB
+    TicketService --> TicketDB
+    CommentAPI --> TicketDB
+    
+    TicketDB --> RabbitMQ
+    RabbitMQ --> Consumer
+    
+    style Frontend fill:#e1f5ff,stroke:#01579b,stroke-width:2px
+    style Gateway fill:#fff3e0,stroke:#e65100,stroke-width:2px
+    style StaticAssets fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
+    style AuthService fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px
+    style UserService fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px
+    style TicketService fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px
+    style CommentAPI fill:#fff9c4,stroke:#f57f17,stroke-width:2px
+    style AuthDB fill:#e3f2fd,stroke:#0d47a1,stroke-width:2px
+    style UserDB fill:#e3f2fd,stroke:#0d47a1,stroke-width:2px
+    style TicketDB fill:#e3f2fd,stroke:#0d47a1,stroke-width:2px
+    style RabbitMQ fill:#fce4ec,stroke:#880e4f,stroke-width:2px
+    style Consumer fill:#fff9c4,stroke:#f57f17,stroke-width:2px
 ```
 
 ## Microservices Architecture
