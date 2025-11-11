@@ -280,11 +280,9 @@ Authorization: Bearer <token>
 
 ## Comment Endpoints
 
-**Note:** Comment endpoints are accessed directly via the Comment API on port 5003, not through the API Gateway. This is an architectural decision to allow the comment system to scale independently.
-
 ### Get Comments for Ticket
 ```bash
-GET http://localhost:5003/tickets/:ticketId/comments
+GET /api/tickets/:ticketId/comments
 ```
 
 **Authentication:** Not required (read-only)
@@ -304,7 +302,7 @@ GET http://localhost:5003/tickets/:ticketId/comments
 
 ### Add Comment
 ```bash
-POST http://localhost:5003/comments
+POST /api/comments
 Authorization: Bearer <token>
 Content-Type: application/json
 
@@ -327,7 +325,7 @@ Content-Type: application/json
 
 ### Update Comment
 ```bash
-PUT http://localhost:5003/comments/:commentId
+PUT /api/comments/:commentId
 Authorization: Bearer <token>
 Content-Type: application/json
 
@@ -349,7 +347,7 @@ Content-Type: application/json
 
 ### Delete Comment
 ```bash
-DELETE http://localhost:5003/comments/:commentId
+DELETE /api/comments/:commentId
 Authorization: Bearer <token>
 ```
 
