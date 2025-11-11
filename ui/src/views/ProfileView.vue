@@ -119,7 +119,7 @@ const recentTickets = computed(() => {
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
   
   return userTickets.value.filter(ticket => {
-    const ticketDate = new Date(ticket.created_at)
+    const ticketDate = new Date(ticket.opening_date || ticket.created_at)
     return ticketDate >= sevenDaysAgo
   }).length
 })

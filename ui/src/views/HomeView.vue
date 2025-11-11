@@ -84,6 +84,19 @@
     <div class="recent-tickets-section" v-if="isAuthenticated">
       <div class="section-header">
         <h3><i class="bi bi-person-badge"></i> Your Recent Tickets</h3>
+        <div class="filter-controls">
+          <select v-model="userTicketPriorityFilter" class="form-select modern-select">
+            <option value="">All priorities</option>
+            <option value="high">High</option>
+            <option value="medium">Medium</option>
+            <option value="low">Low</option>
+          </select>
+          <select v-model="userTicketSortBy" class="form-select modern-select">
+            <option value="recent">Most recent</option>
+            <option value="oldest">Oldest</option>
+            <option value="priority">By priority</option>
+          </select>
+        </div>
         <button class="btn btn-outline-primary" @click="goToTickets">
           View All <i class="bi bi-arrow-right"></i>
         </button>
@@ -117,6 +130,19 @@
     <div class="all-tickets-section">
       <div class="section-header">
         <h3><i class="bi bi-globe"></i> All Platform Tickets</h3>
+        <div class="filter-controls">
+          <select v-model="allTicketPriorityFilter" class="form-select modern-select">
+            <option value="">All priorities</option>
+            <option value="high">High</option>
+            <option value="medium">Medium</option>
+            <option value="low">Low</option>
+          </select>
+          <select v-model="allTicketSortBy" class="form-select modern-select">
+            <option value="recent">Most recent</option>
+            <option value="oldest">Oldest</option>
+            <option value="priority">By priority</option>
+          </select>
+        </div>
         <button v-if="!isAuthenticated" class="btn btn-primary" @click="goToLogin">
           <i class="bi bi-box-arrow-in-right"></i> Sign in to Interact
         </button>
@@ -157,6 +183,10 @@
   const router = useRouter()
 
   const loading = ref(false)
+  const userTicketPriorityFilter = ref('')
+  const userTicketSortBy = ref('recent')
+  const allTicketPriorityFilter = ref('')
+  const allTicketSortBy = ref('recent')
 
   const fetchTickets = async () => {
     loading.value = true
@@ -183,6 +213,11 @@
   const role = computed(() => authStore.getRole)
   
   const userName = computed(() => {
+    // Try to get name and surname from user object first
+    if (authStore.user?.name && authStore.user?.surname) {
+      return `${authStore.user.name} ${authStore.user.surname}`
+    }
+    // Fallback to email username if user data not available yet
     const emailValue = email.value
     return emailValue ? emailValue.split('@')[0] : 'Guest'
   })
@@ -200,23 +235,73 @@
   })
 
   const recentUserTickets = computed(() => {
-    return [...userTickets.value]
-      .sort((a, b) => {
+    let result = [...userTickets.value]
+    
+    // Apply priority filter
+    if (userTicketPriorityFilter.value) {
+      result = result.filter(ticket => 
+        ticket.priority?.toLowerCase() === userTicketPriorityFilter.value.toLowerCase()
+      )
+    }
+    
+    // Apply sorting
+    if (userTicketSortBy.value === 'recent') {
+      result.sort((a, b) => {
         const dateA = new Date(a.opening_date || a.created_at)
         const dateB = new Date(b.opening_date || b.created_at)
         return dateB - dateA
       })
-      .slice(0, 6)
+    } else if (userTicketSortBy.value === 'oldest') {
+      result.sort((a, b) => {
+        const dateA = new Date(a.opening_date || a.created_at)
+        const dateB = new Date(b.opening_date || b.created_at)
+        return dateA - dateB
+      })
+    } else if (userTicketSortBy.value === 'priority') {
+      const priorityOrder = { high: 3, medium: 2, low: 1 }
+      result.sort((a, b) => {
+        const priorityA = priorityOrder[a.priority?.toLowerCase()] || 0
+        const priorityB = priorityOrder[b.priority?.toLowerCase()] || 0
+        return priorityB - priorityA
+      })
+    }
+    
+    return result.slice(0, 6)
   })
 
   const latestAllTickets = computed(() => {
-    return [...allTickets.value]
-      .sort((a, b) => {
+    let result = [...allTickets.value]
+    
+    // Apply priority filter
+    if (allTicketPriorityFilter.value) {
+      result = result.filter(ticket => 
+        ticket.priority?.toLowerCase() === allTicketPriorityFilter.value.toLowerCase()
+      )
+    }
+    
+    // Apply sorting
+    if (allTicketSortBy.value === 'recent') {
+      result.sort((a, b) => {
         const dateA = new Date(a.opening_date || a.created_at)
         const dateB = new Date(b.opening_date || b.created_at)
         return dateB - dateA
       })
-      .slice(0, 12)
+    } else if (allTicketSortBy.value === 'oldest') {
+      result.sort((a, b) => {
+        const dateA = new Date(a.opening_date || a.created_at)
+        const dateB = new Date(b.opening_date || b.created_at)
+        return dateA - dateB
+      })
+    } else if (allTicketSortBy.value === 'priority') {
+      const priorityOrder = { high: 3, medium: 2, low: 1 }
+      result.sort((a, b) => {
+        const priorityA = priorityOrder[a.priority?.toLowerCase()] || 0
+        const priorityB = priorityOrder[b.priority?.toLowerCase()] || 0
+        return priorityB - priorityA
+      })
+    }
+    
+    return result.slice(0, 12)
   })
 
   const recentTickets = computed(() => {
@@ -225,14 +310,16 @@
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
     
     return userTickets.value.filter(ticket => {
-      const ticketDate = new Date(ticket.created_at)
+      const ticketDate = new Date(ticket.opening_date || ticket.created_at)
       return ticketDate >= sevenDaysAgo
     }).length
   })
 
   const highPriorityTickets = computed(() => {
     if (!isAuthenticated.value) return 0
-    return userTickets.value.filter(ticket => ticket.priority === 'HIGH').length
+    return userTickets.value.filter(ticket => 
+      ticket.priority?.toLowerCase() === 'high'
+    ).length
   })
 
   const getRoleLabel = (roleValue) => {
@@ -499,6 +586,8 @@
   justify-content: space-between;
   align-items: center;
   margin-bottom: 2rem;
+  flex-wrap: wrap;
+  gap: 1rem;
 }
 
 .section-header h3 {
@@ -509,6 +598,36 @@
   align-items: center;
   gap: 0.5rem;
   margin: 0;
+}
+
+.filter-controls {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.modern-select {
+  min-width: 150px;
+  padding: 0.5rem 1rem;
+  border: 2px solid #e9ecef;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #495057;
+  background-color: white;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.modern-select:hover {
+  border-color: #667eea;
+}
+
+.modern-select:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
 }
 
 .empty-state {

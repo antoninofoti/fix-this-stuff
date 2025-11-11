@@ -38,9 +38,9 @@
             </div>
             <select v-model="filterPriority" class="form-select modern-select">
               <option value="">All priorities</option>
-              <option value="HIGH">High</option>
-              <option value="MEDIUM">Medium</option>
-              <option value="LOW">Low</option>
+              <option value="high">High</option>
+              <option value="medium">Medium</option>
+              <option value="low">Low</option>
             </select>
             <select v-model="sortBy" class="form-select modern-select">
               <option value="recent">Most recent</option>
@@ -123,7 +123,9 @@
 
     // Filtra per priorità
     if (filterPriority.value) {
-      result = result.filter(ticket => ticket.priority === filterPriority.value)
+      result = result.filter(ticket => 
+        ticket.priority?.toLowerCase() === filterPriority.value.toLowerCase()
+      )
     }
 
     // Filtra per utente
@@ -140,8 +142,12 @@
     } else if (sortBy.value === 'oldest') {
       result.sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
     } else if (sortBy.value === 'priority') {
-      const priorityOrder = { HIGH: 3, MEDIUM: 2, LOW: 1 }
-      result.sort((a, b) => priorityOrder[b.priority] - priorityOrder[a.priority])
+      const priorityOrder = { high: 3, medium: 2, low: 1 }
+      result.sort((a, b) => {
+        const priorityA = priorityOrder[a.priority?.toLowerCase()] || 0
+        const priorityB = priorityOrder[b.priority?.toLowerCase()] || 0
+        return priorityB - priorityA
+      })
     }
 
     return result
