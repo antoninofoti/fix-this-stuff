@@ -13,11 +13,11 @@ graph TD
     TicketService["Ticket Service<br/>Node.js:3003"]
     CommentAPI["Comment API<br/>Flask:5003"]
     
-    AuthDB[("authdb<br/>PostgreSQL")]
-    UserDB[("userdb<br/>PostgreSQL")]
-    TicketDB[("ticketdb<br/>PostgreSQL")]
+    AuthDB[("authdb<br/>PostgreSQL:5432")]
+    UserDB[("userdb<br/>PostgreSQL:5432")]
+    TicketDB[("ticketdb<br/>PostgreSQL:5432")]
     
-    RabbitMQ[("RabbitMQ<br/>Message Queue")]
+    RabbitMQ[("RabbitMQ:5672<br/>Message Queue")]
     Consumer["Comments Consumer<br/>Python"]
     
     Frontend --> Gateway
