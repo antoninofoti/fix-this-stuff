@@ -21,33 +21,37 @@ graph TD
     Consumer["Comments Consumer<br/>Python"]
     
     Frontend --> Gateway
-    Frontend --> StaticAssets
     
     Gateway --> AuthService
     Gateway --> UserService
     Gateway --> TicketService
-    Gateway --> CommentAPI
     
     AuthService --> AuthDB
     UserService --> UserDB
     TicketService --> TicketDB
-    CommentAPI --> TicketDB
     
-    TicketDB --> RabbitMQ
+    Gateway --> CommentAPI
+    CommentAPI --> RabbitMQ
     RabbitMQ --> Consumer
+    Consumer --> TicketDB
     
-    style Frontend fill:#e1f5ff,stroke:#01579b,stroke-width:2px
-    style Gateway fill:#fff3e0,stroke:#e65100,stroke-width:2px
-    style StaticAssets fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
-    style AuthService fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px
-    style UserService fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px
-    style TicketService fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px
-    style CommentAPI fill:#fff9c4,stroke:#f57f17,stroke-width:2px
-    style AuthDB fill:#e3f2fd,stroke:#0d47a1,stroke-width:2px
-    style UserDB fill:#e3f2fd,stroke:#0d47a1,stroke-width:2px
-    style TicketDB fill:#e3f2fd,stroke:#0d47a1,stroke-width:2px
-    style RabbitMQ fill:#fce4ec,stroke:#880e4f,stroke-width:2px
-    style Consumer fill:#fff9c4,stroke:#f57f17,stroke-width:2px
+    Frontend -.-> StaticAssets
+    
+    classDef frontend fill:#e1f5ff,stroke:#01579b,stroke-width:2px
+    classDef gateway fill:#fff3e0,stroke:#e65100,stroke-width:2px
+    classDef static fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
+    classDef nodeService fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px
+    classDef pythonService fill:#fff9c4,stroke:#f57f17,stroke-width:2px
+    classDef database fill:#e3f2fd,stroke:#0d47a1,stroke-width:2px
+    classDef queue fill:#fce4ec,stroke:#880e4f,stroke-width:2px
+    
+    class Frontend frontend
+    class Gateway gateway
+    class StaticAssets static
+    class AuthService,UserService,TicketService nodeService
+    class CommentAPI,Consumer pythonService
+    class AuthDB,UserDB,TicketDB database
+    class RabbitMQ queue
 ```
 
 ## Microservices Architecture
