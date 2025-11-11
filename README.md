@@ -316,10 +316,6 @@ The public leaderboard ranks all users by total points earned:
 
 ## Authentication & Security
 
-```
-
-## Authentication & Security
-
 ### JWT Token Flow
 
 The system implements a secure JWT-based authentication mechanism:
